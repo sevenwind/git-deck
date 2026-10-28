@@ -9,13 +9,17 @@ struct GitDeckApp: App {
         WindowGroup("GitDeck") {
             ContentView()
                 .environmentObject(store)
+                .environmentObject(updater)
                 .frame(minWidth: 1000, minHeight: 640)
+                .onAppear { updater.startAutoCheck() }
         }
         .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(after: .appInfo) {
-                Button("Проверить обновления…") { Task { await updater.checkInteractive() } }
-                    .disabled(updater.phase != .idle)
+                Button(updater.availableVersion.map { "Доступна версия \($0) — установить…" } ?? "Проверить обновления…") {
+                    Task { await updater.promptInstall() }
+                }
+                .disabled(updater.phase != .idle)
             }
             CommandGroup(after: .newItem) {
                 Button("Добавить рабочую область…") { store.addWorkspace() }

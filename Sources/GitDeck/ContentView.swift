@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var updater: Updater
 
     var body: some View {
         NavigationSplitView {
@@ -16,6 +17,25 @@ struct ContentView: View {
         }
         .sheet(isPresented: $store.showClone) { CloneSheet().environmentObject(store) }
         .sheet(item: $store.prompt) { p in PromptSheet(request: p) }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let v = updater.availableVersion, !updater.bannerDismissed {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
+                    Text("Доступна новая версия GitDeck \(v) (у вас \(updater.currentVersion))")
+                    Spacer()
+                    if updater.phase == .idle {
+                        Button("Установить") { Task { await updater.promptInstall() } }
+                            .buttonStyle(.borderedProminent).controlSize(.small)
+                        Button("Позже") { updater.bannerDismissed = true }.controlSize(.small)
+                    } else {
+                        ProgressView().controlSize(.small)
+                        Text(updater.status).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(.blue.opacity(0.12))
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             if let b = store.banner {
                 BannerView(banner: b) { store.banner = nil }

@@ -14,6 +14,31 @@ final class Updater: ObservableObject {
 
     @Published var phase: Phase = .idle
     @Published var status = ""
+    /// Версия, найденная фоновой проверкой (nil — обновлений нет). По ней показывается баннер.
+    @Published var availableVersion: String?
+    @Published var bannerDismissed = false
+    private var pending: (release: Release, asset: Release.Asset)?
+    private var autoCheckTask: Task<Void, Never>?
+
+    /// Фоновая проверка при запуске и затем раз в 6 часов; без окон и ошибок в интерфейсе.
+    func startAutoCheck() {
+        guard autoCheckTask == nil else { return }
+        autoCheckTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.checkSilently()
+                try? await Task.sleep(nanoseconds: 6 * 3600 * 1_000_000_000)
+            }
+        }
+    }
+
+    private func checkSilently() async {
+        guard phase == .idle, let found = try? await fetchLatest(),
+              Self.isNewer(found.0.tag_name, than: currentVersion) else { return }
+        if availableVersion != found.0.tag_name { bannerDismissed = false }
+        pending = found
+        availableVersion = found.0.tag_name
+        NSApp.dockTile.badgeLabel = "1"
+    }
 
     /// Репозиторий вида «owner/repo», задаётся в настройках.
     static let defaultRepo = "sevenwind/git-deck"
@@ -26,7 +51,7 @@ final class Updater: ObservableObject {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     }
 
-    private struct Release: Decodable {
+    fileprivate struct Release: Decodable {
         struct Asset: Decodable {
             let name: String
             let browser_download_url: URL
@@ -56,16 +81,25 @@ final class Updater: ObservableObject {
                 return
             }
             phase = .idle
-            status = "Доступна версия \(latest)"
-            let notes = (release.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let text = "Доступна версия \(latest), у вас \(currentVersion)." + (notes.isEmpty ? "" : "\n\n\(notes.prefix(800))")
-            if confirm("Доступно обновление", text, ok: "Установить и перезапустить") {
-                await install(asset: asset)
-            }
+            pending = (release, asset)
+            availableVersion = latest
+            await promptInstall()
         } catch {
             phase = .idle
             status = "Ошибка: \(error.localizedDescription)"
             alert("Не удалось проверить обновления", error.localizedDescription)
+        }
+    }
+
+    /// Окно с описанием релиза; по подтверждению ставит найденную версию.
+    func promptInstall() async {
+        guard phase == .idle else { return }
+        guard let (release, asset) = pending else { return await checkInteractive() }
+        status = "Доступна версия \(release.tag_name)"
+        let notes = (release.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = "Доступна версия \(release.tag_name), у вас \(currentVersion)." + (notes.isEmpty ? "" : "\n\n\(notes.prefix(800))")
+        if confirm("Доступно обновление", text, ok: "Установить и перезапустить") {
+            await install(asset: asset)
         }
     }
 
