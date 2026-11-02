@@ -167,16 +167,13 @@ final class AppStore: ObservableObject {
 
     // MARK: sync GitHub organization
 
-    /// Организации текущего пользователя `gh` (GitHub CLI).
+    /// Организации текущего пользователя GitHub.
     func loadOrganizations() async -> (orgs: [String], error: String?) {
-        let r = await Shell.run("/usr/bin/env", ["gh", "api", "user/orgs", "--paginate", "--jq", ".[].login"])
-        guard r.ok else {
-            let hint = r.err.contains("No such file") || r.code == 127
-                ? "GitHub CLI (gh) не найден. Установите: brew install gh, затем gh auth login"
-                : r.combined
-            return ([], hint)
-        }
-        return (r.out.split(separator: "\n").map(String.init).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }, nil)
+        do {
+            let o = try await GitHubAPI.organizations()
+            return (o.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }, nil)
+        } catch let e as GitHubAPI.Failure { return ([], e.text) }
+        catch { return ([], error.localizedDescription) }
     }
 
     func cancelSync() { syncControl?.cancel(); syncProgress = "Прерываю…" }
@@ -190,28 +187,19 @@ final class AppStore: ObservableObject {
         syncControl = control
         defer { syncingOrg = false; syncProgress = ""; syncControl = nil }
 
-        // clone напрямую через git по URL из списка: `gh repo clone` делает лишние API-запросы на каждый репозиторий
-        let proto = (await Shell.run("/usr/bin/env", ["gh", "config", "get", "git_protocol"], control: control)).out.trimmed
-        let urlField = proto == "ssh" ? "sshUrl" : "url"
-        var args = ["gh", "repo", "list", org, "--limit", "5000", "--json", "name,\(urlField)"]
-        if !includeArchived { args.append("--no-archived") }
-        args += ["--jq", ".[] | [.name, .\(urlField)] | @tsv"]
-        let list = await Shell.run("/usr/bin/env", args, control: control)
-        guard !control.isCancelled else {
-            banner = Banner(title: "Синхронизация \(org) прервана", text: "Список репозиториев не получен", isError: true)
+        let list: [GitHubAPI.RepoInfo]
+        do {
+            list = try await GitHubAPI.repos(org: org, control: control).filter { includeArchived || !$0.archived }
+        } catch {
+            if control.isCancelled {
+                banner = Banner(title: "Синхронизация \(org) прервана", text: "Список репозиториев не получен", isError: true)
+            } else {
+                banner = Banner(title: "Синхронизация \(org): ошибка", text: (error as? GitHubAPI.Failure)?.text ?? error.localizedDescription, isError: true)
+            }
             return
         }
-        guard list.ok else {
-            banner = Banner(title: "Синхронизация \(org): ошибка", text: list.combined, isError: true)
-            return
-        }
-        var urls: [String: String] = [:]
-        var names: [String] = []
-        for line in list.out.split(separator: "\n") {
-            let f = line.split(separator: "\t").map(String.init)
-            guard f.count == 2 else { continue }
-            names.append(f[0]); urls[f[0]] = f[1]
-        }
+        let urls = Dictionary(list.map { ($0.name, $0.cloneURL) }, uniquingKeysWith: { a, _ in a })
+        let names = list.map(\.name)
         let fm = FileManager.default
         var existing: [String: String] = [:]   // имя -> путь
         for r in found[ws] ?? [] { existing[r.name] = r.path }
