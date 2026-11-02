@@ -82,7 +82,9 @@ struct ChangesView: View {
     }
 
     @ViewBuilder private var diffPane: some View {
-        if let sel = model.selection, let d = model.diff, let f = model.files.first(where: { $0.path == sel.path }) {
+        if let sel = model.selection, let f = model.files.first(where: { $0.path == sel.path }), f.conflicted {
+            ConflictResolverView(model: model, file: f)
+        } else if let sel = model.selection, let d = model.diff, let f = model.files.first(where: { $0.path == sel.path }) {
             VStack(spacing: 0) {
                 HStack {
                     Text(f.path).font(.headline).lineLimit(1).truncationMode(.middle)
@@ -151,8 +153,8 @@ struct FileRow: View {
         }
         .contextMenu {
             if file.conflicted {
-                Button("Взять нашу версию (ours)") { Task { await model.resolve(file, side: "ours") } }
-                Button("Взять их версию (theirs)") { Task { await model.resolve(file, side: "theirs") } }
+                Button("Взять текущую версию") { Task { await model.resolve(file, side: "ours") } }
+                Button("Взять входящую версию") { Task { await model.resolve(file, side: "theirs") } }
                 Button("Отметить как решённый") { Task { await model.resolve(file, side: nil) } }
             } else if staged {
                 Button("Убрать из индекса") { Task { await model.unstage([file.path]) } }
