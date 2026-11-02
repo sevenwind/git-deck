@@ -79,6 +79,7 @@ struct HeaderBar: View {
                 Label(model.branchTitle, systemImage: "arrow.triangle.branch").font(.headline)
             }
             .fixedSize()
+            .help("Текущая ветка. Нажмите, чтобы переключиться на другую или создать новую")
 
             if let u = model.upstream {
                 Text(u).font(.caption).foregroundStyle(.secondary)
@@ -97,24 +98,26 @@ struct HeaderBar: View {
                 Button("Выкачать ветку по имени…") { model.promptFetchBranch() }
             } label: { Label("Fetch", systemImage: "arrow.triangle.2.circlepath") } primaryAction: { Task { await model.fetch() } }
                 .fixedSize()
-                .help("git fetch --all --prune (стрелка — выкачать ветку по имени)")
+                .help("Fetch: получить новые коммиты и ветки с сервера, не меняя рабочую копию (git fetch --all --prune). Стрелка — выкачать ветку по имени")
             Menu {
                 Button("Pull (merge)") { Task { await model.pull(.merge) } }
                 Button("Pull --rebase") { Task { await model.pull(.rebase) } }
                 Button("Pull --ff-only") { Task { await model.pull(.ffOnly) } }
             } label: { Label("Pull", systemImage: "arrow.down.circle") } primaryAction: { Task { await model.pull(.merge) } }
                 .fixedSize()
+                .help("Pull: забрать коммиты с сервера и влить в текущую ветку (git pull). Стрелка — выбрать merge / rebase / ff-only")
             Menu {
                 Button("Push") { Task { await model.push() } }
                 Button("Force push (--force-with-lease)…") { model.askForcePush() }
             } label: { Label("Push", systemImage: "arrow.up.circle") } primaryAction: { Task { await model.push() } }
                 .fixedSize()
+                .help("Push: отправить локальные коммиты текущей ветки на сервер (git push). Стрелка — force push")
 
             Divider().frame(height: 18)
             Button { model.openTerminal() } label: { Label("Terminal", systemImage: "terminal") }
                 .help("Открыть репозиторий в терминале (⇧⌘T)")
-            Button { model.revealInFinder() } label: { Image(systemName: "folder") }.help("Показать в Finder")
-            Button { Task { await model.refreshAll() } } label: { Image(systemName: "arrow.clockwise") }.help("Обновить (⌘R)")
+            Button { model.revealInFinder() } label: { Image(systemName: "folder") }.help("Открыть папку репозитория в Finder")
+            Button { Task { await model.refreshAll() } } label: { Image(systemName: "arrow.clockwise") }.help("Перечитать состояние репозитория: статус, ветки, историю, stash и теги (⌘R). Сеть не используется — для загрузки с сервера нажмите Fetch")
         }
         .disabled(model.busy && false)
         .padding(.horizontal, 12).padding(.vertical, 8)

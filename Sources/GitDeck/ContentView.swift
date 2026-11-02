@@ -123,10 +123,11 @@ struct SidebarView: View {
                     Button("Клонировать…", systemImage: "square.and.arrow.down") { store.showClone = true }
                     Button("Создать репозиторий (git init)…", systemImage: "plus.square") { store.initRepository() }
                 } label: { Label("Добавить", systemImage: "plus") }
+                    .help("Добавить рабочую область, открыть, клонировать или создать репозиторий")
                 Button { store.rescan() } label: {
                     if store.scanning { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") }
                 }
-                .help("Пересканировать рабочие области")
+                .help("Заново найти репозитории в добавленных рабочих областях (папках)")
             }
         }
     }
@@ -228,8 +229,8 @@ struct BannerView: View {
                 .frame(maxHeight: 140)
             }
             Spacer(minLength: 0)
-            Button { copyToPasteboard(banner.text) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.borderless).help("Копировать")
-            Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.borderless)
+            Button { copyToPasteboard(banner.text) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.borderless).help("Копировать текст сообщения в буфер обмена")
+            Button(action: close) { Image(systemName: "xmark") }.buttonStyle(.borderless).help("Закрыть сообщение")
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(.regularMaterial))

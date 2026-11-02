@@ -13,6 +13,7 @@ struct BranchesView: View {
                 TextField("Фильтр веток", text: $filter).textFieldStyle(.plain)
                 Spacer()
                 Button { model.promptNewBranch(from: nil) } label: { Label("Новая ветка", systemImage: "plus") }
+                    .help("Создать новую ветку от текущего коммита")
             }
             .padding(8)
             Divider()
@@ -79,6 +80,7 @@ struct StashView: View {
             VStack(spacing: 0) {
                 HStack {
                     Button { model.promptStash() } label: { Label("Спрятать изменения", systemImage: "tray.and.arrow.down") }
+                        .help("Временно убрать все незакоммиченные изменения в stash (git stash)")
                     Spacer()
                 }
                 .padding(8)
@@ -141,6 +143,7 @@ struct TagsRemotesView: View {
                     Text("Теги").font(.headline)
                     Spacer()
                     Button { model.promptTag(at: nil) } label: { Label("Новый тег", systemImage: "plus") }
+                        .help("Создать тег на текущем коммите")
                 }
                 .padding(8)
                 Divider()
@@ -173,6 +176,7 @@ struct TagsRemotesView: View {
                     Text("Remotes").font(.headline)
                     Spacer()
                     Button { model.promptAddRemote() } label: { Label("Добавить", systemImage: "plus") }
+                        .help("Добавить удалённый репозиторий (git remote add)")
                 }
                 .padding(8)
                 Divider()

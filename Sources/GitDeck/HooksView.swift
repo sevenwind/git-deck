@@ -44,6 +44,7 @@ struct HooksView: View {
                         .help(h.huskyInstalled ? "npx husky — выставляет core.hooksPath" : "Установит зависимости; husky подключится через prepare-скрипт")
                 }
                 Button { Task { await model.refreshHooks() } } label: { Image(systemName: "arrow.clockwise") }
+                    .help("Перечитать список git-хуков и настройки Husky с диска")
             }
             HStack(spacing: 14) {
                 Text("core.hooksPath: \(h.hooksPathConfig ?? "не задан (.git/hooks)")").font(.caption).foregroundStyle(.secondary)
@@ -91,6 +92,7 @@ struct HooksView: View {
                             }
                         } label: { Image(systemName: "plus") }
                             .menuStyle(.borderlessButton).fixedSize()
+                            .help("Создать новый хук из стандартных git-хуков")
                     }
                 }
             }
@@ -117,6 +119,7 @@ struct HookEditor: View {
                 Button { Task { await model.runHook(file) } } label: { Label("Запустить", systemImage: "play.fill") }
                     .help("Выполнить хук вручную в папке репозитория")
                 Button { model.askDeleteHook(file) } label: { Image(systemName: "trash") }
+                    .help("Удалить этот хук")
                 Button("Сохранить") { save() }
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(text == original)

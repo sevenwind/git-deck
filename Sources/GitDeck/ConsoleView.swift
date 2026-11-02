@@ -47,8 +47,9 @@ struct ConsoleView: View {
                     .onKeyPress(.downArrow) { step(1); return .handled }
                 if model.busy { ProgressView().controlSize(.small) }
                 Button("Выполнить") { send() }.disabled(input.trimmed.isEmpty || model.busy)
-                Button { model.consoleLog.removeAll() } label: { Image(systemName: "trash") }.help("Очистить")
+                Button { model.consoleLog.removeAll() } label: { Image(systemName: "trash") }.help("Очистить журнал консоли")
                 Button { model.openTerminal() } label: { Label("Открыть в Terminal", systemImage: "terminal") }
+                    .help("Открыть репозиторий в приложении Terminal")
             }
             .padding(10)
         }
