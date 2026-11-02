@@ -45,6 +45,7 @@ final class AppStore: ObservableObject {
     @Published var showOrgSync = false
     @Published var syncingOrg = false
     @Published var syncProgress = ""
+    private var syncControl: RunControl?
 
     private var models: [String: RepoModel] = [:]
 
@@ -178,54 +179,91 @@ final class AppStore: ObservableObject {
         return (r.out.split(separator: "\n").map(String.init).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }, nil)
     }
 
+    func cancelSync() { syncControl?.cancel(); syncProgress = "Прерываю…" }
+
     /// Клонирует в `ws` все репозитории организации, которых там ещё нет. Существующие не трогает и ничего не удаляет.
     func syncOrganization(_ org: String, into ws: String, includeArchived: Bool) async {
         guard !syncingOrg else { return }
         syncingOrg = true
         syncProgress = "Получаю список репозиториев…"
-        defer { syncingOrg = false; syncProgress = "" }
+        let control = RunControl()
+        syncControl = control
+        defer { syncingOrg = false; syncProgress = ""; syncControl = nil }
 
-        var args = ["gh", "repo", "list", org, "--limit", "5000", "--json", "name"]
+        // clone напрямую через git по URL из списка: `gh repo clone` делает лишние API-запросы на каждый репозиторий
+        let proto = (await Shell.run("/usr/bin/env", ["gh", "config", "get", "git_protocol"], control: control)).out.trimmed
+        let urlField = proto == "ssh" ? "sshUrl" : "url"
+        var args = ["gh", "repo", "list", org, "--limit", "5000", "--json", "name,\(urlField)"]
         if !includeArchived { args.append("--no-archived") }
-        args += ["--jq", ".[].name"]
-        let list = await Shell.run("/usr/bin/env", args)
+        args += ["--jq", ".[] | [.name, .\(urlField)] | @tsv"]
+        let list = await Shell.run("/usr/bin/env", args, control: control)
+        guard !control.isCancelled else {
+            banner = Banner(title: "Синхронизация \(org) прервана", text: "Список репозиториев не получен", isError: true)
+            return
+        }
         guard list.ok else {
             banner = Banner(title: "Синхронизация \(org): ошибка", text: list.combined, isError: true)
             return
         }
-        let names = list.out.split(separator: "\n").map(String.init)
-        let fm = FileManager.default
-        let known = Set((found[ws] ?? []).map(\.name))
-        let missing = names.filter { !known.contains($0) && !fm.fileExists(atPath: ws + "/" + $0) }
-        let skipped = names.count - missing.count
-
-        guard !missing.isEmpty else {
-            banner = Banner(title: "Синхронизация \(org)", text: "Новых репозиториев нет (в организации: \(names.count))", isError: false)
-            return
+        var urls: [String: String] = [:]
+        var names: [String] = []
+        for line in list.out.split(separator: "\n") {
+            let f = line.split(separator: "\t").map(String.init)
+            guard f.count == 2 else { continue }
+            names.append(f[0]); urls[f[0]] = f[1]
         }
+        let fm = FileManager.default
+        var existing: [String: String] = [:]   // имя -> путь
+        for r in found[ws] ?? [] { existing[r.name] = r.path }
+        var missing: [String] = []
+        for n in names {
+            let dir = ws + "/" + n
+            if existing[n] != nil { continue }
+            if fm.fileExists(atPath: dir + "/.git") { existing[n] = dir }
+            else if !fm.fileExists(atPath: dir) { missing.append(n) }
+        }
+        let toUpdate = names.compactMap { existing[$0] }
 
         var failures: [String] = []
         var done = 0
+        let total = missing.count + toUpdate.count
         var index = 0
-        await withTaskGroup(of: (String, CmdResult).self) { group in
+        await withTaskGroup(of: (String, Bool, String, Bool).self) { group in
             func next() {
-                guard index < missing.count else { return }
-                let n = missing[index]; index += 1
-                group.addTask {
-                    (n, await Shell.run("/usr/bin/env", ["gh", "repo", "clone", "\(org)/\(n)", ws + "/" + n], cwd: ws))
+                if control.isCancelled { return }
+                if index < missing.count {
+                    let n = missing[index]; index += 1
+                    group.addTask {
+                        let r = await Shell.run("/usr/bin/env", ["git", "clone", urls[n] ?? "", ws + "/" + n], cwd: ws, control: control)
+                        if control.isCancelled { try? FileManager.default.removeItem(atPath: ws + "/" + n) }  // недокачанный клон
+                        return (n, r.ok, r.combined.split(separator: "\n").last.map(String.init) ?? "ошибка", true)
+                    }
+                } else if index - missing.count < toUpdate.count {
+                    let p = toUpdate[index - missing.count]; index += 1
+                    group.addTask {
+                        let (_, ok, msg) = await AppStore.updateRepo(p, control: control)
+                        return ((p as NSString).lastPathComponent, ok, msg, false)
+                    }
                 }
             }
-            for _ in 0..<min(4, missing.count) { next() }
-            while let (n, r) = await group.next() {
+            for _ in 0..<min(8, total) { next() }
+            while let (n, ok, msg, _) = await group.next() {
                 done += 1
-                syncProgress = "Клонировано \(done) из \(missing.count)"
-                if !r.ok { failures.append("✗ \(n): \(r.combined.split(separator: "\n").last.map(String.init) ?? "ошибка")") }
+                syncProgress = "Обработано \(done) из \(total)"
+                if !ok && !control.isCancelled { failures.append("✗ \(n): \(msg)") }
                 next()
             }
         }
         rescan()
-        let ok = missing.count - failures.count
-        var text = "Склонировано: \(ok), уже были: \(skipped)"
+        await refreshModels()
+        if control.isCancelled {
+            banner = Banner(title: "Синхронизация \(org) прервана",
+                            text: "Обработано \(done) из \(total). Недокачанные клоны удалены, уже готовые репозитории сохранены." +
+                                  (failures.isEmpty ? "" : "\nОшибки до прерывания:\n" + failures.sorted().joined(separator: "\n")),
+                            isError: true)
+            return
+        }
+        var text = "Склонировано новых: \(missing.count - failures.filter { f in missing.contains { f.hasPrefix("✗ \($0):") } }.count), обновлено существующих: \(toUpdate.count)"
         if !failures.isEmpty { text += ", ошибок: \(failures.count)\n" + failures.sorted().joined(separator: "\n") }
         banner = Banner(title: failures.isEmpty ? "Синхронизация \(org) завершена" : "Синхронизация \(org): есть ошибки",
                         text: text, isError: !failures.isEmpty)
@@ -268,12 +306,12 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private nonisolated static func updateRepo(_ p: String) async -> (String, Bool, String) {
-        let f = await Shell.git(["fetch", "--all", "--prune"], cwd: p)
+    private nonisolated static func updateRepo(_ p: String, control: RunControl? = nil) async -> (String, Bool, String) {
+        let f = await Shell.git(["fetch", "--all", "--prune"], cwd: p, control: control)
         guard f.ok else { return (p, false, "fetch: " + f.combined) }
-        let up = await Shell.git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd: p)
+        let up = await Shell.git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd: p, control: control)
         guard up.ok else { return (p, true, "fetch выполнен (у текущей ветки нет upstream или HEAD отсоединён)") }
-        let r = await Shell.git(["pull", "--ff-only"], cwd: p)
+        let r = await Shell.git(["pull", "--ff-only"], cwd: p, control: control)
         return (p, r.ok, r.combined.isEmpty ? "готово" : r.combined.split(separator: "\n").last.map(String.init) ?? "готово")
     }
 

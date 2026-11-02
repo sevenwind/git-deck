@@ -40,6 +40,34 @@ final class ShellEnv: @unchecked Sendable {
     }
 }
 
+/// Позволяет прервать группу запущенных процессов (вместе с их дочерними, например git под gh).
+final class RunControl: @unchecked Sendable {
+    private let lock = NSLock()
+    private var procs: [Process] = []
+    private(set) var cancelled = false
+
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+
+    fileprivate func register(_ p: Process) {
+        lock.lock(); procs.append(p); let c = cancelled; lock.unlock()
+        if c { RunControl.kill(p) }
+    }
+
+    func cancel() {
+        lock.lock(); cancelled = true; let list = procs; lock.unlock()
+        list.forEach(RunControl.kill)
+    }
+
+    private static func kill(_ p: Process) {
+        guard p.isRunning else { return }
+        let pk = Process()
+        pk.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        pk.arguments = ["-TERM", "-P", String(p.processIdentifier)]
+        try? pk.run(); pk.waitUntilExit()
+        p.terminate()
+    }
+}
+
 enum Shell {
     static func baseEnv() -> [String: String] {
         var e = ProcessInfo.processInfo.environment
@@ -53,7 +81,8 @@ enum Shell {
     }
 
     static func runSync(_ exe: String, _ args: [String], cwd: String?,
-                        env: [String: String] = [:], stdin: String? = nil) -> CmdResult {
+                        env: [String: String] = [:], stdin: String? = nil,
+                        control: RunControl? = nil) -> CmdResult {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: exe)
         p.arguments = args
@@ -83,6 +112,7 @@ enum Shell {
             er.fileHandleForReading.readabilityHandler = nil
             return CmdResult(out: "", err: error.localizedDescription, code: 127)
         }
+        control?.register(p)
         if let stdin {
             i.fileHandleForWriting.write(Data(stdin.utf8))
             try? i.fileHandleForWriting.close()
@@ -96,17 +126,19 @@ enum Shell {
     }
 
     static func run(_ exe: String, _ args: [String], cwd: String? = nil,
-                    env: [String: String] = [:], stdin: String? = nil) async -> CmdResult {
+                    env: [String: String] = [:], stdin: String? = nil,
+                    control: RunControl? = nil) async -> CmdResult {
         await withCheckedContinuation { c in
             DispatchQueue.global(qos: .userInitiated).async {
-                c.resume(returning: runSync(exe, args, cwd: cwd, env: env, stdin: stdin))
+                c.resume(returning: runSync(exe, args, cwd: cwd, env: env, stdin: stdin, control: control))
             }
         }
     }
 
     /// git с настройками по умолчанию (вывод путей в UTF-8, без интерактивных запросов).
-    static func git(_ args: [String], cwd: String, env: [String: String] = [:], stdin: String? = nil) async -> CmdResult {
-        await run("/usr/bin/env", ["git", "-c", "core.quotepath=false"] + args, cwd: cwd, env: env, stdin: stdin)
+    static func git(_ args: [String], cwd: String, env: [String: String] = [:], stdin: String? = nil,
+                    control: RunControl? = nil) async -> CmdResult {
+        await run("/usr/bin/env", ["git", "-c", "core.quotepath=false"] + args, cwd: cwd, env: env, stdin: stdin, control: control)
     }
 
     /// Находит ветку `name` среди remote-ссылок; если её нет (узкий refspec у single-branch клона) —

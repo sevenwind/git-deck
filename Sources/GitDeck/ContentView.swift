@@ -228,7 +228,7 @@ struct OrgSyncSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Синхронизировать организацию GitHub").font(.title3.bold())
-            Text("Клонирует все репозитории организации, которых ещё нет в папке. Существующие не изменяются и не удаляются.")
+            Text("Клонирует репозитории организации, которых ещё нет в папке, а существующие обновляет (fetch + pull --ff-only). Ничего не удаляется.")
                 .font(.caption).foregroundStyle(.secondary)
             if loading {
                 HStack { ProgressView().controlSize(.small); Text("Загрузка организаций…").foregroundStyle(.secondary) }
@@ -250,7 +250,11 @@ struct OrgSyncSheet: View {
             HStack {
                 if store.syncingOrg { ProgressView().controlSize(.small); Text(store.syncProgress).foregroundStyle(.secondary) }
                 Spacer()
-                Button("Закрыть") { dismiss() }.keyboardShortcut(.cancelAction)
+                if store.syncingOrg {
+                    Button("Прервать", role: .destructive) { store.cancelSync() }.keyboardShortcut(.cancelAction)
+                } else {
+                    Button("Закрыть") { dismiss() }.keyboardShortcut(.cancelAction)
+                }
                 Button("Синхронизировать") {
                     Task {
                         if !store.workspaces.contains(parent) { store.workspaces.append(parent) }
