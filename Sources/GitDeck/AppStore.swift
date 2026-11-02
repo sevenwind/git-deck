@@ -42,6 +42,9 @@ final class AppStore: ObservableObject {
     @Published var cloning = false
     @Published var updatingWorkspaces: Set<String> = []
     @Published var prompt: PromptRequest?
+    @Published var showOrgSync = false
+    @Published var syncingOrg = false
+    @Published var syncProgress = ""
 
     private var models: [String: RepoModel] = [:]
 
@@ -159,6 +162,74 @@ final class AppStore: ObservableObject {
         } else {
             banner = Banner(title: "git clone: ошибка", text: r.combined, isError: true)
         }
+    }
+
+    // MARK: sync GitHub organization
+
+    /// Организации текущего пользователя `gh` (GitHub CLI).
+    func loadOrganizations() async -> (orgs: [String], error: String?) {
+        let r = await Shell.run("/usr/bin/env", ["gh", "api", "user/orgs", "--paginate", "--jq", ".[].login"])
+        guard r.ok else {
+            let hint = r.err.contains("No such file") || r.code == 127
+                ? "GitHub CLI (gh) не найден. Установите: brew install gh, затем gh auth login"
+                : r.combined
+            return ([], hint)
+        }
+        return (r.out.split(separator: "\n").map(String.init).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }, nil)
+    }
+
+    /// Клонирует в `ws` все репозитории организации, которых там ещё нет. Существующие не трогает и ничего не удаляет.
+    func syncOrganization(_ org: String, into ws: String, includeArchived: Bool) async {
+        guard !syncingOrg else { return }
+        syncingOrg = true
+        syncProgress = "Получаю список репозиториев…"
+        defer { syncingOrg = false; syncProgress = "" }
+
+        var args = ["gh", "repo", "list", org, "--limit", "5000", "--json", "name"]
+        if !includeArchived { args.append("--no-archived") }
+        args += ["--jq", ".[].name"]
+        let list = await Shell.run("/usr/bin/env", args)
+        guard list.ok else {
+            banner = Banner(title: "Синхронизация \(org): ошибка", text: list.combined, isError: true)
+            return
+        }
+        let names = list.out.split(separator: "\n").map(String.init)
+        let fm = FileManager.default
+        let known = Set((found[ws] ?? []).map(\.name))
+        let missing = names.filter { !known.contains($0) && !fm.fileExists(atPath: ws + "/" + $0) }
+        let skipped = names.count - missing.count
+
+        guard !missing.isEmpty else {
+            banner = Banner(title: "Синхронизация \(org)", text: "Новых репозиториев нет (в организации: \(names.count))", isError: false)
+            return
+        }
+
+        var failures: [String] = []
+        var done = 0
+        var index = 0
+        await withTaskGroup(of: (String, CmdResult).self) { group in
+            func next() {
+                guard index < missing.count else { return }
+                let n = missing[index]; index += 1
+                group.addTask {
+                    (n, await Shell.run("/usr/bin/env", ["gh", "repo", "clone", "\(org)/\(n)", ws + "/" + n], cwd: ws))
+                }
+            }
+            for _ in 0..<min(4, missing.count) { next() }
+            while let (n, r) = await group.next() {
+                done += 1
+                syncProgress = "Клонировано \(done) из \(missing.count)"
+                if !r.ok { failures.append("✗ \(n): \(r.combined.split(separator: "\n").last.map(String.init) ?? "ошибка")") }
+                next()
+            }
+        }
+        rescan()
+        let ok = missing.count - failures.count
+        var text = "Склонировано: \(ok), уже были: \(skipped)"
+        if !failures.isEmpty { text += ", ошибок: \(failures.count)\n" + failures.sorted().joined(separator: "\n") }
+        banner = Banner(title: failures.isEmpty ? "Синхронизация \(org) завершена" : "Синхронизация \(org): есть ошибки",
+                        text: text, isError: !failures.isEmpty)
+        if failures.isEmpty { showOrgSync = false }
     }
 
     // MARK: update all / fetch branch

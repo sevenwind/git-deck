@@ -16,6 +16,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $store.showClone) { CloneSheet().environmentObject(store) }
+        .sheet(isPresented: $store.showOrgSync) { OrgSyncSheet().environmentObject(store) }
         .sheet(item: $store.prompt) { p in PromptSheet(request: p) }
         .safeAreaInset(edge: .top, spacing: 0) {
             if let v = updater.availableVersion, !updater.bannerDismissed {
@@ -121,6 +122,7 @@ struct SidebarView: View {
                     Button("Добавить рабочую область…", systemImage: "folder.badge.plus") { store.addWorkspace() }
                     Button("Открыть репозиторий…", systemImage: "folder") { store.openRepository() }
                     Button("Клонировать…", systemImage: "square.and.arrow.down") { store.showClone = true }
+                    Button("Синхронизировать организацию GitHub…", systemImage: "arrow.triangle.2.circlepath") { store.showOrgSync = true }
                     Button("Создать репозиторий (git init)…", systemImage: "plus.square") { store.initRepository() }
                 } label: { Label("Добавить", systemImage: "plus") }
                     .help("Добавить рабочую область, открыть, клонировать или создать репозиторий")
@@ -210,6 +212,63 @@ struct CloneSheet: View {
         while s.hasSuffix("/") { s.removeLast() }
         if s.hasSuffix(".git") { s.removeLast(4) }
         return s.split(whereSeparator: { $0 == "/" || $0 == ":" }).last.map(String.init) ?? ""
+    }
+}
+
+struct OrgSyncSheet: View {
+    @EnvironmentObject var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @Local private var orgs: [String] = []
+    @Local private var org = ""
+    @Local private var parent = ""
+    @Local private var includeArchived = false
+    @Local private var loading = true
+    @Local private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Синхронизировать организацию GitHub").font(.title3.bold())
+            Text("Клонирует все репозитории организации, которых ещё нет в папке. Существующие не изменяются и не удаляются.")
+                .font(.caption).foregroundStyle(.secondary)
+            if loading {
+                HStack { ProgressView().controlSize(.small); Text("Загрузка организаций…").foregroundStyle(.secondary) }
+            } else if let error {
+                Text(error).foregroundStyle(.red).textSelection(.enabled)
+            } else if orgs.isEmpty {
+                Text("У вашего аккаунта нет организаций").foregroundStyle(.secondary)
+            } else {
+                Picker("Организация", selection: $org) { ForEach(orgs, id: \.self) { Text($0).tag($0) } }
+                HStack {
+                    Picker("В папку", selection: $parent) {
+                        ForEach(store.workspaces, id: \.self) { Text(($0 as NSString).abbreviatingWithTildeInPath).tag($0) }
+                        if !parent.isEmpty && !store.workspaces.contains(parent) { Text(parent).tag(parent) }
+                    }
+                    Button("Другая…") { if let p = store.pickFolder("Куда клонировать репозитории организации") { parent = p } }
+                }
+                Toggle("Включая архивные", isOn: $includeArchived)
+            }
+            HStack {
+                if store.syncingOrg { ProgressView().controlSize(.small); Text(store.syncProgress).foregroundStyle(.secondary) }
+                Spacer()
+                Button("Закрыть") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Синхронизировать") {
+                    Task {
+                        if !store.workspaces.contains(parent) { store.workspaces.append(parent) }
+                        await store.syncOrganization(org, into: parent, includeArchived: includeArchived)
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(org.isEmpty || parent.isEmpty || store.syncingOrg)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .task {
+            let r = await store.loadOrganizations()
+            orgs = r.orgs; error = r.error; loading = false
+            if org.isEmpty { org = orgs.first ?? "" }
+            if parent.isEmpty { parent = store.workspaces.first ?? "" }
+        }
     }
 }
 
