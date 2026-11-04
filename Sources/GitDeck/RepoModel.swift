@@ -31,6 +31,8 @@ final class RepoModel: ObservableObject {
 
     // История
     @Published var commits: [Commit] = []
+    @Published var graph: [GraphRow] = []
+    @Published var graphWidth = 1
     @Published var historyQuery = ""
     @Published var historyAll = true
     @Published var canLoadMore = false
@@ -190,11 +192,17 @@ final class RepoModel: ObservableObject {
         let q = historyQuery.trimmed
         if !q.isEmpty { args += ["-i", "--grep=" + q] }
         let r = await git(args, log: false, env: ["GIT_OPTIONAL_LOCKS": "0"])
-        guard r.ok else { commits = []; canLoadMore = false; return }
+        guard r.ok else { commits = []; graph = []; canLoadMore = false; return }
         var list = parseCommits(r.out)
         canLoadMore = list.count > historyLimit
         if canLoadMore { list.removeLast() }
         commits = list
+        if q.isEmpty {
+            graph = GraphLayout.build(list)
+            graphWidth = min(max(graph.map(\.width).max() ?? 1, 1), 12)
+        } else {
+            graph = []   // при поиске цепочки родителей разорваны
+        }
     }
 
     func loadMoreHistory() async {

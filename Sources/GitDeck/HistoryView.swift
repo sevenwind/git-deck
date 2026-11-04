@@ -31,8 +31,19 @@ struct HistoryView: View {
                 .padding(8)
                 Divider()
                 List(selection: Binding(get: { model.selectedCommitID }, set: { id in Task { await model.selectCommit(id) } })) {
-                    ForEach(model.commits) { c in
-                        CommitRow(commit: c).tag(c.id)
+                    ForEach(Array(model.commits.enumerated()), id: \.element.id) { i, c in
+                        HStack(spacing: 6) {
+                            if i < model.graph.count && model.graph.count == model.commits.count {
+                                GraphCell(row: model.graph[i], maxWidth: model.graphWidth,
+                                          isHead: c.refs.contains { $0.hasPrefix("HEAD") })
+                                    .clipped()
+                            }
+                            CommitRow(commit: c)
+                        }
+                        .frame(height: GraphCell.rowHeight)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                        .listRowSeparator(.hidden)
+                        .tag(c.id)
                             .contextMenu { CommitMenu(model: model, commit: c) }
                     }
                     if model.canLoadMore {
