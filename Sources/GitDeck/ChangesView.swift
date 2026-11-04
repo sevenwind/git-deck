@@ -88,7 +88,7 @@ struct ChangesView: View {
             VStack(spacing: 0) {
                 HStack {
                     Text(f.path).font(.headline).lineLimit(1).truncationMode(.middle)
-                    Text(sel.staged ? "в индексе" : (f.untracked ? "новый файл" : "рабочая папка"))
+                    Text(sel.staged ? L("в индексе") : (f.untracked ? L("новый файл") : L("рабочая папка")))
                         .font(.caption).padding(.horizontal, 6).padding(.vertical, 1)
                         .background(Capsule().fill(.secondary.opacity(0.2)))
                     Spacer()
@@ -161,7 +161,7 @@ struct FileRow: View {
                 Button("Сбросить файл полностью…", role: .destructive) { model.askDiscardCompletely(file) }
             } else {
                 Button("Добавить в индекс") { Task { await model.stage([file.path]) } }
-                Button(file.untracked ? "Удалить файл…" : "Отменить изменения…", role: .destructive) { model.askDiscard(file) }
+                Button(file.untracked ? L("Удалить файл…") : L("Отменить изменения…"), role: .destructive) { model.askDiscard(file) }
             }
             if !file.conflicted {
                 Divider()

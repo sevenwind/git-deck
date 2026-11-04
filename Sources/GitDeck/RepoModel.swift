@@ -104,6 +104,7 @@ final class RepoModel: ObservableObject {
     /// Выполняет git-операцию с индикатором занятости, показом ошибки и обновлением состояния.
     @discardableResult
     func run(_ title: String, _ args: [String], stdin: String? = nil, showOutput: Bool = false) async -> Bool {
+        let title = L(title)
         busyCount += 1
         busyTitle = title
         let r = await git(args, stdin: stdin)
@@ -111,7 +112,7 @@ final class RepoModel: ObservableObject {
         if r.ok {
             if showOutput, !r.combined.isEmpty { show(title, r.combined, error: false) }
         } else {
-            show("\(title): ошибка", r.combined.isEmpty ? "Код выхода \(r.code)" : r.combined, error: true)
+            show(L("%@: ошибка", title), r.combined.isEmpty ? L("Код выхода %lld", Int(r.code)) : r.combined, error: true)
         }
         await refreshAll()
         return r.ok
@@ -123,7 +124,7 @@ final class RepoModel: ObservableObject {
         let r = await Shell.run("/bin/sh", ["-c", command], cwd: path, env: huskyEnv)
         addLog(command, r)
         busyCount -= 1
-        show(r.ok ? title : "\(title): ошибка", r.combined.isEmpty ? "Готово" : r.combined, error: !r.ok)
+        show(r.ok ? title : L("%@: ошибка", title), r.combined.isEmpty ? L("Готово") : r.combined, error: !r.ok)
         await refreshAll()
     }
 
@@ -305,9 +306,9 @@ final class RepoModel: ObservableObject {
     func unstageAll() async { await unstage(staged.map(\.path)) }
 
     func askDiscard(_ f: FileEntry) {
-        confirm = ConfirmRequest(title: "Отменить изменения в «\(f.fileName)»?",
-                                 message: "Изменения будут безвозвратно потеряны.",
-                                 confirmLabel: "Отменить изменения") { [weak self] in
+        confirm = ConfirmRequest(title: L("Отменить изменения в «%@»?", f.fileName),
+                                 message: L("Изменения будут безвозвратно потеряны."),
+                                 confirmLabel: L("Отменить изменения")) { [weak self] in
             Task { await self?.discard(f) }
         }
     }
@@ -320,9 +321,9 @@ final class RepoModel: ObservableObject {
     /// Полный сброс файла (и индекс, и рабочая папка) до состояния HEAD.
     func askDiscardCompletely(_ f: FileEntry) {
         let added = f.x == "A" || f.x == "R" || f.x == "C"
-        confirm = ConfirmRequest(title: "Сбросить «\(f.fileName)»?",
-                                 message: added ? "Файл добавлен в индекс и будет удалён из индекса и с диска." : "Изменения в индексе и в рабочей папке будут безвозвратно потеряны.",
-                                 confirmLabel: "Сбросить") { [weak self] in
+        confirm = ConfirmRequest(title: L("Сбросить «%@»?", f.fileName),
+                                 message: added ? L("Файл добавлен в индекс и будет удалён из индекса и с диска.") : L("Изменения в индексе и в рабочей папке будут безвозвратно потеряны."),
+                                 confirmLabel: L("Сбросить")) { [weak self] in
             Task { await self?.discardCompletely(f) }
         }
     }
@@ -343,26 +344,26 @@ final class RepoModel: ObservableObject {
 
     /// Сброс всех изменений: reset --hard, опционально clean -fd для новых файлов.
     func askDiscardAll(includeUntracked: Bool) {
-        confirm = ConfirmRequest(title: "Отменить все изменения?",
-                                 message: "Будут безвозвратно потеряны все изменения в отслеживаемых файлах (включая индекс)"
-                                    + (includeUntracked ? " и удалены все новые неотслеживаемые файлы и папки." : ". Новые файлы останутся."),
-                                 confirmLabel: "Отменить все") { [weak self] in
+        confirm = ConfirmRequest(title: L("Отменить все изменения?"),
+                                 message: L("Будут безвозвратно потеряны все изменения в отслеживаемых файлах (включая индекс)")
+                                    + (includeUntracked ? L(" и удалены все новые неотслеживаемые файлы и папки.") : L(". Новые файлы останутся.")),
+                                 confirmLabel: L("Отменить все")) { [weak self] in
             Task { await self?.discardAll(includeUntracked: includeUntracked) }
         }
     }
 
     func discardAll(includeUntracked: Bool) async {
         busyCount += 1
-        busyTitle = "Отмена всех изменений"
+        busyTitle = L("Отмена всех изменений")
         defer { busyCount -= 1 }
         var results: [CmdResult] = []
         if hasCommits { results.append(await git(["reset", "--hard"])) }
         else { results.append(await git(["rm", "-r", "-f", "--cached", "--ignore-unmatch", "--", "."])) }
         if includeUntracked, results.allSatisfy(\.ok) { results.append(await git(["clean", "-f", "-d"])) }
         if let bad = results.first(where: { !$0.ok }) {
-            show("Отмена всех изменений: ошибка", bad.combined, error: true)
+            show(L("Отмена всех изменений: ошибка"), bad.combined, error: true)
         } else {
-            show("Изменения отменены", includeUntracked ? "Рабочая папка приведена к HEAD" : "Новые файлы сохранены", error: false)
+            show(L("Изменения отменены"), includeUntracked ? L("Рабочая папка приведена к HEAD") : L("Новые файлы сохранены"), error: false)
         }
         await refreshAll()
     }
@@ -370,8 +371,8 @@ final class RepoModel: ObservableObject {
     // MARK: stash files / gitignore
 
     func promptStashFiles(_ files: [FileEntry]) {
-        let title = files.count == 1 ? "Stash: \(files[0].fileName)" : "Stash: файлов \(files.count)"
-        prompt = PromptRequest(title: title, fields: [PromptField(label: "Сообщение (необязательно)")],
+        let title = files.count == 1 ? L("Stash: %@", files[0].fileName) : L("Stash: файлов %lld", files.count)
+        prompt = PromptRequest(title: title, fields: [PromptField(label: L("Сообщение (необязательно)"))],
                                confirmLabel: "Stash") { [weak self] v, _ in
             var args = ["stash", "push"]
             if files.contains(where: \.untracked) { args.append("--include-untracked") }
@@ -398,9 +399,9 @@ final class RepoModel: ObservableObject {
         if f.untracked {
             Task { await addToGitignore(pattern) }
         } else {
-            confirm = ConfirmRequest(title: "Добавить «\(f.fileName)» в .gitignore?",
-                                     message: "Файл уже отслеживается git. Чтобы игнорирование сработало, он будет убран из индекса (git rm --cached), на диске останется.",
-                                     confirmLabel: "Игнорировать", destructive: false) { [weak self] in
+            confirm = ConfirmRequest(title: L("Добавить «%@» в .gitignore?", f.fileName),
+                                     message: L("Файл уже отслеживается git. Чтобы игнорирование сработало, он будет убран из индекса (git rm --cached), на диске останется."),
+                                     confirmLabel: L("Игнорировать"), destructive: false) { [weak self] in
                 Task {
                     guard let self else { return }
                     if await self.run("Убрать из индекса", ["rm", "--cached", "-r", "--", f.path]) {
@@ -421,15 +422,15 @@ final class RepoModel: ObservableObject {
         let file = path + "/.gitignore"
         let existing = (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
         if existing.components(separatedBy: "\n").contains(where: { $0.trimmed == pattern }) {
-            show(".gitignore", "«\(pattern)» уже есть в .gitignore", error: false)
+            show(".gitignore", L("«%@» уже есть в .gitignore", pattern), error: false)
             return
         }
         let sep = existing.isEmpty || existing.hasSuffix("\n") ? "" : "\n"
         do {
             try (existing + sep + pattern + "\n").write(toFile: file, atomically: true, encoding: .utf8)
-            show(".gitignore", "Добавлено: \(pattern)", error: false)
+            show(".gitignore", L("Добавлено: %@", pattern), error: false)
         } catch {
-            show(".gitignore: ошибка", error.localizedDescription, error: true)
+            show(L(".gitignore: ошибка"), error.localizedDescription, error: true)
         }
         await refreshAll()
     }
@@ -471,9 +472,9 @@ final class RepoModel: ObservableObject {
     func fetch() async { await run("Fetch", ["fetch", "--all", "--prune"], showOutput: true) }
 
     func promptFetchBranch() {
-        prompt = PromptRequest(title: "Выкачать ветку", message: "Fetch и переключение на ветку по имени",
-                               fields: [PromptField(label: "Имя ветки")],
-                               confirmLabel: "Выкачать") { [weak self] v, _ in
+        prompt = PromptRequest(title: L("Выкачать ветку"), message: L("Fetch и переключение на ветку по имени"),
+                               fields: [PromptField(label: L("Имя ветки"))],
+                               confirmLabel: L("Выкачать")) { [weak self] v, _ in
             guard let name = v.first?.trimmed, !name.isEmpty else { return }
             Task { await self?.fetchBranch(name) }
         }
@@ -481,12 +482,12 @@ final class RepoModel: ObservableObject {
 
     /// Fetch всех remote, затем переключение на локальную ветку (с ff-pull) или создание отслеживающей из remote.
     func fetchBranch(_ name: String) async {
-        let title = "Выкачать ветку \(name)"
+        let title = L("Выкачать ветку %@", name)
         busyCount += 1
         busyTitle = title
         defer { busyCount -= 1 }
         let f = await git(["fetch", "--all", "--prune"])
-        guard f.ok else { show("\(title): ошибка", f.combined, error: true); return }
+        guard f.ok else { show(L("%@: ошибка", title), f.combined, error: true); return }
 
         let r: CmdResult
         if (await git(["rev-parse", "--verify", "--quiet", "refs/heads/" + name])).ok {
@@ -497,13 +498,13 @@ final class RepoModel: ObservableObject {
             } else { r = sw }
         } else {
             guard let remote = await Shell.remoteTrackingRef(name, cwd: path) else {
-                show("\(title): ошибка", "Ветка «\(name)» не найдена ни локально, ни на удалённых репозиториях", error: true)
+                show(L("%@: ошибка", title), L("Ветка «%@» не найдена ни локально, ни на удалённых репозиториях", name), error: true)
                 await refreshAll()
                 return
             }
             r = await Shell.switchTracking(remote, name: name) { [self] in await git($0) }
         }
-        show(r.ok ? title : "\(title): ошибка", r.combined.isEmpty ? "Готово" : r.combined, error: !r.ok)
+        show(r.ok ? title : L("%@: ошибка", title), r.combined.isEmpty ? L("Готово") : r.combined, error: !r.ok)
         await refreshAll()
     }
 
@@ -521,7 +522,7 @@ final class RepoModel: ObservableObject {
 
     func askForcePush() {
         confirm = ConfirmRequest(title: "Force push?",
-                                 message: "Будет выполнен push --force-with-lease: удалённая история ветки может быть перезаписана.",
+                                 message: L("Будет выполнен push --force-with-lease: удалённая история ветки может быть перезаписана."),
                                  confirmLabel: "Force push") { [weak self] in
             Task { await self?.push(force: true) }
         }
@@ -559,10 +560,10 @@ final class RepoModel: ObservableObject {
     func checkoutRef(_ ref: String) async { await run("Checkout", ["switch", "--detach", ref]) }
 
     func promptNewBranch(from ref: String?) {
-        prompt = PromptRequest(title: "Новая ветка",
-                               message: ref.map { "От: \($0)" } ?? "От текущего коммита",
-                               fields: [PromptField(label: "Название ветки")],
-                               toggleTitle: "Переключиться на неё", toggleValue: true, confirmLabel: "Создать") { [weak self] v, sw in
+        prompt = PromptRequest(title: L("Новая ветка"),
+                               message: ref.map { L("От: %@", $0) } ?? L("От текущего коммита"),
+                               fields: [PromptField(label: L("Название ветки"))],
+                               toggleTitle: L("Переключиться на неё"), toggleValue: true, confirmLabel: L("Создать")) { [weak self] v, sw in
             guard let name = v.first?.trimmed, !name.isEmpty else { return }
             Task { await self?.createBranch(name, from: ref, checkout: sw) }
         }
@@ -575,9 +576,9 @@ final class RepoModel: ObservableObject {
     }
 
     func askDelete(_ b: Branch) {
-        confirm = ConfirmRequest(title: "Удалить ветку «\(b.name)»?",
-                                 message: b.isRemote ? "Ветка будет удалена на сервере (push --delete)." : "Если ветка не слита, git откажет — тогда можно повторить с принудительным удалением.",
-                                 confirmLabel: "Удалить") { [weak self] in
+        confirm = ConfirmRequest(title: L("Удалить ветку «%@»?", b.name),
+                                 message: b.isRemote ? L("Ветка будет удалена на сервере (push --delete).") : L("Если ветка не слита, git откажет — тогда можно повторить с принудительным удалением."),
+                                 confirmLabel: L("Удалить")) { [weak self] in
             Task { await self?.delete(b) }
         }
     }
@@ -589,9 +590,9 @@ final class RepoModel: ObservableObject {
         } else {
             let ok = await run("Удаление ветки", ["branch", "-d", b.name])
             if !ok {
-                confirm = ConfirmRequest(title: "Удалить принудительно?",
-                                         message: "Ветка «\(b.name)» не слита. Принудительное удаление (-D) потеряет её коммиты.",
-                                         confirmLabel: "Удалить -D") { [weak self] in
+                confirm = ConfirmRequest(title: L("Удалить принудительно?"),
+                                         message: L("Ветка «%@» не слита. Принудительное удаление (-D) потеряет её коммиты.", b.name),
+                                         confirmLabel: L("Удалить -D")) { [weak self] in
                     Task { await self?.run("Удаление ветки", ["branch", "-D", b.name]) }
                 }
             }
@@ -599,8 +600,8 @@ final class RepoModel: ObservableObject {
     }
 
     func promptRename(_ b: Branch) {
-        prompt = PromptRequest(title: "Переименовать ветку", fields: [PromptField(label: "Новое имя", value: b.name)],
-                               confirmLabel: "Переименовать") { [weak self] v, _ in
+        prompt = PromptRequest(title: L("Переименовать ветку"), fields: [PromptField(label: L("Новое имя"), value: b.name)],
+                               confirmLabel: L("Переименовать")) { [weak self] v, _ in
             guard let n = v.first?.trimmed, !n.isEmpty else { return }
             Task { await self?.run("Переименование", ["branch", "-m", b.name, n]) }
         }
@@ -627,17 +628,17 @@ final class RepoModel: ObservableObject {
 
     func askReset(_ c: Commit, mode: String) {
         let hard = mode == "hard"
-        confirm = ConfirmRequest(title: "Reset --\(mode) на \(c.short)?",
-                                 message: hard ? "Все незафиксированные изменения и коммиты после этой точки будут потеряны." : "Указатель ветки переместится на выбранный коммит.",
+        confirm = ConfirmRequest(title: L("Reset --%@ на %@?", mode, c.short),
+                                 message: hard ? L("Все незафиксированные изменения и коммиты после этой точки будут потеряны.") : L("Указатель ветки переместится на выбранный коммит."),
                                  confirmLabel: "Reset --\(mode)", destructive: hard) { [weak self] in
             Task { await self?.run("Reset", ["reset", "--\(mode)", c.hash]) }
         }
     }
 
     func promptTag(at ref: String?) {
-        prompt = PromptRequest(title: "Новый тег", message: ref.map { "На: \($0)" } ?? "На текущем коммите",
-                               fields: [PromptField(label: "Имя тега"), PromptField(label: "Сообщение (необязательно, создаст annotated-тег)")],
-                               confirmLabel: "Создать") { [weak self] v, _ in
+        prompt = PromptRequest(title: L("Новый тег"), message: ref.map { L("На: %@", $0) } ?? L("На текущем коммите"),
+                               fields: [PromptField(label: L("Имя тега")), PromptField(label: L("Сообщение (необязательно, создаст annotated-тег)"))],
+                               confirmLabel: L("Создать")) { [weak self] v, _ in
             guard let n = v.first?.trimmed, !n.isEmpty else { return }
             let msg = v.count > 1 ? v[1].trimmed : ""
             var args = ["tag"]
@@ -650,8 +651,8 @@ final class RepoModel: ObservableObject {
     // MARK: stash
 
     func promptStash() {
-        prompt = PromptRequest(title: "Спрятать изменения (stash)", fields: [PromptField(label: "Сообщение (необязательно)")],
-                               toggleTitle: "Включая неотслеживаемые файлы", toggleValue: true, confirmLabel: "Stash") { [weak self] v, sw in
+        prompt = PromptRequest(title: L("Спрятать изменения (stash)"), fields: [PromptField(label: L("Сообщение (необязательно)"))],
+                               toggleTitle: L("Включая неотслеживаемые файлы"), toggleValue: true, confirmLabel: "Stash") { [weak self] v, sw in
             var args = ["stash", "push"]
             if sw { args.append("--include-untracked") }
             if let m = v.first?.trimmed, !m.isEmpty { args += ["-m", m] }
@@ -670,29 +671,29 @@ final class RepoModel: ObservableObject {
     // MARK: tags / remotes
 
     func askDeleteTag(_ t: TagItem) {
-        confirm = ConfirmRequest(title: "Удалить тег «\(t.name)»?", message: "Локальный тег будет удалён.", confirmLabel: "Удалить") { [weak self] in
+        confirm = ConfirmRequest(title: L("Удалить тег «%@»?", t.name), message: L("Локальный тег будет удалён."), confirmLabel: L("Удалить")) { [weak self] in
             Task { await self?.run("Удаление тега", ["tag", "-d", t.name]) }
         }
     }
 
     func promptAddRemote() {
-        prompt = PromptRequest(title: "Добавить remote", fields: [PromptField(label: "Имя", value: "origin"), PromptField(label: "URL")],
-                               confirmLabel: "Добавить") { [weak self] v, _ in
+        prompt = PromptRequest(title: L("Добавить remote"), fields: [PromptField(label: L("Имя"), value: "origin"), PromptField(label: "URL")],
+                               confirmLabel: L("Добавить")) { [weak self] v, _ in
             guard v.count == 2, !v[0].trimmed.isEmpty, !v[1].trimmed.isEmpty else { return }
             Task { await self?.run("Добавить remote", ["remote", "add", v[0].trimmed, v[1].trimmed]) }
         }
     }
 
     func promptSetURL(_ r: RemoteItem) {
-        prompt = PromptRequest(title: "URL remote «\(r.name)»", fields: [PromptField(label: "URL", value: r.url)],
-                               confirmLabel: "Сохранить") { [weak self] v, _ in
+        prompt = PromptRequest(title: L("URL remote «%@»", r.name), fields: [PromptField(label: "URL", value: r.url)],
+                               confirmLabel: L("Сохранить")) { [weak self] v, _ in
             guard let u = v.first?.trimmed, !u.isEmpty else { return }
             Task { await self?.run("Изменить URL", ["remote", "set-url", r.name, u]) }
         }
     }
 
     func askRemoveRemote(_ r: RemoteItem) {
-        confirm = ConfirmRequest(title: "Удалить remote «\(r.name)»?", message: r.url, confirmLabel: "Удалить") { [weak self] in
+        confirm = ConfirmRequest(title: L("Удалить remote «%@»?", r.name), message: r.url, confirmLabel: L("Удалить")) { [weak self] in
             Task { await self?.run("Удалить remote", ["remote", "remove", r.name]) }
         }
     }
@@ -751,12 +752,12 @@ final class RepoModel: ObservableObject {
         let p = group.dir + "/" + name
         let fm = FileManager.default
         try? fm.createDirectory(atPath: group.dir, withIntermediateDirectories: true)
-        guard !fm.fileExists(atPath: p) else { show("Хук уже существует", name, error: true); return }
+        guard !fm.fileExists(atPath: p) else { show(L("Хук уже существует"), name, error: true); return }
         let body = group.isHusky ? "# Команды запускаются при хуке \(name)\n" : "#!/bin/sh\n\n"
         do {
             try body.write(toFile: p, atomically: true, encoding: .utf8)
             try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: p)
-        } catch { show("Не удалось создать хук", error.localizedDescription, error: true) }
+        } catch { show(L("Не удалось создать хук"), error.localizedDescription, error: true) }
         await refreshHooks()
     }
 
@@ -771,27 +772,27 @@ final class RepoModel: ObservableObject {
     }
 
     func askDeleteHook(_ f: HookFile) {
-        confirm = ConfirmRequest(title: "Удалить хук «\(f.name)»?", message: f.path, confirmLabel: "Удалить") { [weak self] in
+        confirm = ConfirmRequest(title: L("Удалить хук «%@»?", f.name), message: f.path, confirmLabel: L("Удалить")) { [weak self] in
             Task { await self?.deleteHook(f) }
         }
     }
 
     func runHook(_ f: HookFile) async {
         busyCount += 1
-        busyTitle = "Хук \(f.name)"
+        busyTitle = L("Хук %@", f.name)
         var args = ["-e", f.path]
         if f.name == "commit-msg", let g = gitDir { args.append(g + "/COMMIT_EDITMSG") }
         let r = await Shell.run("/bin/sh", args, cwd: path, env: ["HUSKY": "1"])
         addLog("sh -e \(f.path)", r)
         busyCount -= 1
-        show(r.ok ? "Хук \(f.name): успешно" : "Хук \(f.name): код \(r.code)",
-             r.combined.isEmpty ? "(нет вывода)" : r.combined, error: !r.ok)
+        show(r.ok ? L("Хук %@: успешно", f.name) : L("Хук %@: код %lld", f.name, Int(r.code)),
+             r.combined.isEmpty ? L("(нет вывода)") : r.combined, error: !r.ok)
     }
 
     func askInitHusky() {
-        confirm = ConfirmRequest(title: "Инициализировать Husky?",
-                                 message: "Будет выполнено: \(hooks.hasPackageJson ? "" : "npm init -y && ")npm install --save-dev husky && npx husky init",
-                                 confirmLabel: "Выполнить", destructive: false) { [weak self] in
+        confirm = ConfirmRequest(title: L("Инициализировать Husky?"),
+                                 message: L("Будет выполнено: %@npm install --save-dev husky && npx husky init", hooks.hasPackageJson ? "" : "npm init -y && "),
+                                 confirmLabel: L("Выполнить"), destructive: false) { [weak self] in
             guard let self else { return }
             let pre = self.hooks.hasPackageJson ? "" : "npm init -y && "
             Task { await self.runShell("Husky init", pre + "npm install --save-dev husky && npx husky init") }
@@ -801,13 +802,13 @@ final class RepoModel: ObservableObject {
     func activateHusky() async {
         if !hooks.huskyInstalled { await runShell("npm install", "npm install"); return }
         let cmd = hooks.huskyMajor >= 9 ? "npx --no-install husky" : "npx --no-install husky install"
-        await runShell("Активация Husky", cmd)
+        await runShell(L("Активация Husky"), cmd)
     }
 
     func promptHooksPath() {
-        prompt = PromptRequest(title: "core.hooksPath", message: "Путь к папке с хуками (относительно репозитория или абсолютный)",
-                               fields: [PromptField(label: "Путь", value: hooks.hooksPathConfig ?? "")],
-                               confirmLabel: "Сохранить") { [weak self] v, _ in
+        prompt = PromptRequest(title: "core.hooksPath", message: L("Путь к папке с хуками (относительно репозитория или абсолютный)"),
+                               fields: [PromptField(label: L("Путь"), value: hooks.hooksPathConfig ?? "")],
+                               confirmLabel: L("Сохранить")) { [weak self] v, _ in
             guard let p = v.first?.trimmed, !p.isEmpty else { return }
             Task { await self?.run("core.hooksPath", ["config", "core.hooksPath", p]) }
         }
@@ -825,7 +826,7 @@ final class RepoModel: ObservableObject {
         else if t == "git" || t.hasPrefix("git ") { cmd = t }
         else { cmd = "git " + t }
         busyCount += 1
-        busyTitle = "Консоль"
+        busyTitle = L("Консоль")
         let r = await Shell.run("/bin/zsh", ["-c", cmd], cwd: path, env: huskyEnv)
         addLog(t, r)
         busyCount -= 1

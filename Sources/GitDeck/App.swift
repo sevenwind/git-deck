@@ -71,8 +71,11 @@ struct GitDeckApp: App {
     }
 
     var body: some Scene {
+        let _ = store.lang   // меню и строка меню перестраиваются при смене языка
         Window("GitDeck", id: "main") {
             ContentView()
+                .environment(\.locale, store.lang.locale)
+                .id(store.lang)
                 .environmentObject(store)
                 .environmentObject(updater)
                 .frame(minWidth: 1000, minHeight: 640)
@@ -86,45 +89,45 @@ struct GitDeckApp: App {
         .defaultSize(width: 1280, height: 800)
         .commands {
             CommandGroup(after: .appInfo) {
-                Button(updater.availableVersion.map { "Доступна версия \($0) — установить…" } ?? "Проверить обновления…") {
+                Button(updater.availableVersion.map { L("Доступна версия %@ — установить…", $0) } ?? L("Проверить обновления…")) {
                     Task { await updater.promptInstall() }
                 }
                 .disabled(updater.phase != .idle)
             }
             CommandGroup(after: .newItem) {
-                Button("Добавить рабочую область…") { store.addWorkspace() }
+                Button(L("Добавить рабочую область…")) { store.addWorkspace() }
                     .keyboardShortcut("o", modifiers: [.command, .shift])
-                Button("Открыть репозиторий…") { store.openRepository() }
+                Button(L("Открыть репозиторий…")) { store.openRepository() }
                     .keyboardShortcut("o", modifiers: .command)
-                Button("Клонировать…") { store.showClone = true }
+                Button(L("Клонировать…")) { store.showClone = true }
                     .keyboardShortcut("n", modifiers: [.command, .shift])
             }
-            CommandMenu("Репозиторий") {
-                Button("Обновить") { store.refreshCurrent() }
+            CommandMenu(L("Репозиторий")) {
+                Button(L("Обновить")) { store.refreshCurrent() }
                     .keyboardShortcut("r", modifiers: .command)
-                Button("Пересканировать рабочие области") { store.rescan() }
+                Button(L("Пересканировать рабочие области")) { store.rescan() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                 Divider()
-                Button("Открыть в Terminal") { if let p = store.selected { store.openTerminal(at: p) } }
+                Button(L("Открыть в Terminal")) { if let p = store.selected { store.openTerminal(at: p) } }
                     .keyboardShortcut("t", modifiers: [.command, .shift])
                     .disabled(store.selected == nil)
             }
         }
         MenuBarExtra(isInserted: $menuBarMode) {
-            Button("Показать GitDeck") { showMainWindow() }
+            Button(L("Показать GitDeck")) { showMainWindow() }
             Divider()
-            Button(updater.availableVersion.map { "Доступна версия \($0) — установить…" } ?? "Проверить обновления…") {
+            Button(updater.availableVersion.map { L("Доступна версия %@ — установить…", $0) } ?? L("Проверить обновления…")) {
                 Task { await updater.promptInstall() }
             }
             .disabled(updater.phase != .idle)
-            SettingsLink { Text("Настройки…") }
+            SettingsLink { Text(L("Настройки…")) }
             Divider()
-            Button("Выйти из GitDeck") { NSApp.terminate(nil) }
+            Button(L("Выйти из GitDeck")) { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {
             Image(systemName: updater.availableVersion == nil ? "arrow.triangle.branch" : "arrow.down.circle.fill")
         }
-        Settings { SettingsView().environmentObject(store).environmentObject(updater) }
+        Settings { SettingsView().environmentObject(store).environmentObject(updater).id(store.lang) }
     }
 }
 
@@ -139,6 +142,9 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Picker("Язык / Language", selection: $store.lang) {
+                ForEach(AppLang.allCases) { Text($0.title).tag($0) }
+            }
             TextField("Терминал (имя приложения)", text: $terminalApp, prompt: Text("Terminal, iTerm, Warp…"))
             Stepper("Глубина поиска репозиториев: \(scanDepth)", value: $scanDepth, in: 1...10)
             Toggle("Отключить Husky (HUSKY=0) для операций из приложения", isOn: $disableHusky)
@@ -157,5 +163,6 @@ struct SettingsView: View {
         }
         .padding(20)
         .frame(width: 480)
+        .environment(\.locale, store.lang.locale)
     }
 }

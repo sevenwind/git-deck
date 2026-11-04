@@ -10,7 +10,7 @@ enum GitHubAPI {
         let r = await Shell.run("/usr/bin/env", ["git", "credential", "fill"],
                                 stdin: "protocol=https\nhost=github.com\n\n", control: control)
         guard r.ok, let line = r.out.split(separator: "\n").first(where: { $0.hasPrefix("password=") }) else {
-            throw Failure(text: "Не удалось получить токен GitHub из git credential helper. Выполните git clone любого репозитория GitHub по https и войдите.\n" + r.combined)
+            throw Failure(text: L("Не удалось получить токен GitHub из git credential helper. Выполните git clone любого репозитория GitHub по https и войдите.\n") + r.combined)
         }
         return String(line.dropFirst("password=".count))
     }

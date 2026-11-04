@@ -150,10 +150,10 @@ enum RepoState: Equatable {
     var title: String {
         switch self {
         case .none: ""
-        case .merging: "Идёт слияние (merge)"
-        case .rebasing: "Идёт перебазирование (rebase)"
-        case .cherryPicking: "Идёт cherry-pick"
-        case .reverting: "Идёт revert"
+        case .merging: L("Идёт слияние (merge)")
+        case .rebasing: L("Идёт перебазирование (rebase)")
+        case .cherryPicking: L("Идёт cherry-pick")
+        case .reverting: L("Идёт revert")
         }
     }
 }
@@ -205,7 +205,7 @@ func truncateLines(_ s: String, max: Int = 6000) -> String {
         count += 1
         idx = s.index(after: nl)
         if count >= max {
-            return String(s[..<idx]) + "\n… вывод обрезан (показаны первые \(max) строк)\n"
+            return String(s[..<idx]) + L("\n… вывод обрезан (показаны первые %lld строк)\n", max)
         }
     }
     return s
@@ -294,6 +294,7 @@ enum RepoTab: String, CaseIterable, Identifiable {
     case hooks = "Хуки"
     case console = "Консоль"
     var id: String { rawValue }
+    var title: String { L(rawValue) }
     var icon: String {
         switch self {
         case .changes: "square.and.pencil"

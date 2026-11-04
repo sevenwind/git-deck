@@ -65,7 +65,7 @@ struct HistoryView: View {
                             Text("\(c.author) <\(c.email)>")
                             Text(c.date.formatted(date: .abbreviated, time: .shortened))
                             Button(c.short) { copyToPasteboard(c.hash) }.buttonStyle(.link).help("Копировать полный хеш")
-                            if !c.parents.isEmpty { Text("родитель: " + c.parents.map { String($0.prefix(7)) }.joined(separator: ", ")).foregroundStyle(.secondary) }
+                            if !c.parents.isEmpty { Text(L("родитель: %@", c.parents.map { String($0.prefix(7)) }.joined(separator: ", "))).foregroundStyle(.secondary) }
                         }
                         .font(.caption).foregroundStyle(.secondary)
                     }

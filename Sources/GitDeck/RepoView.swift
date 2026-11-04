@@ -11,7 +11,7 @@ struct RepoView: View {
             Divider()
             Picker("", selection: $model.tab) {
                 ForEach(RepoTab.allCases) { t in
-                    Label(t.rawValue, systemImage: t.icon).tag(t)
+                    Label(L(t.rawValue), systemImage: t.icon).tag(t)
                 }
             }
             .pickerStyle(.segmented)

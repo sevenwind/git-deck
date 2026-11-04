@@ -31,6 +31,8 @@ struct RowInfo { var branch: String; var dirty: Int }
 final class AppStore: ObservableObject {
     @Published var workspaces: [String] { didSet { UserDefaults.standard.set(workspaces, forKey: "workspaces") } }
     @Published var extraRepos: [String] { didSet { UserDefaults.standard.set(extraRepos, forKey: "extraRepos") } }
+    @Published var favorites: Set<String> { didSet { UserDefaults.standard.set(Array(favorites), forKey: "favorites") } }
+    @Published var lang: AppLang = Loc.lang { didSet { Loc.set(lang) } }
     @Published private(set) var found: [String: [Repo]] = [:]
     @Published var query = ""
     @Published var scanning = false
@@ -52,6 +54,8 @@ final class AppStore: ObservableObject {
     init() {
         workspaces = UserDefaults.standard.stringArray(forKey: "workspaces") ?? []
         extraRepos = UserDefaults.standard.stringArray(forKey: "extraRepos") ?? []
+        favorites = Set(UserDefaults.standard.stringArray(forKey: "favorites") ?? [])
+        Loc.prepare()
         ShellEnv.shared.resolve()
         rescan()
     }
@@ -59,7 +63,7 @@ final class AppStore: ObservableObject {
     // MARK: workspaces
 
     func addWorkspace() {
-        guard let p = pickFolder("Выберите рабочую область (папку с репозиториями)") else { return }
+        guard let p = pickFolder(L("Выберите рабочую область (папку с репозиториями)")) else { return }
         if !workspaces.contains(p) { workspaces.append(p) }
         rescan()
     }
@@ -100,7 +104,15 @@ final class AppStore: ObservableObject {
         let q = query.trimmed
         return list
             .filter { q.isEmpty || $0.name.localizedCaseInsensitiveContains(q) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .sorted {
+                let f0 = favorites.contains($0.path), f1 = favorites.contains($1.path)
+                if f0 != f1 { return f0 }   // избранные всегда сверху
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+    }
+
+    func toggleFavorite(_ path: String) {
+        if favorites.contains(path) { favorites.remove(path) } else { favorites.insert(path) }
     }
 
     var totalMatches: Int {
@@ -122,19 +134,19 @@ final class AppStore: ObservableObject {
     // MARK: open / init / clone
 
     func openRepository() {
-        guard let p = pickFolder("Выберите папку с репозиторием") else { return }
+        guard let p = pickFolder(L("Выберите папку с репозиторием")) else { return }
         guard FileManager.default.fileExists(atPath: p + "/.git") else {
-            banner = Banner(title: "Это не git-репозиторий", text: p, isError: true)
+            banner = Banner(title: L("Это не git-репозиторий"), text: p, isError: true)
             return
         }
         addExtra(p)
     }
 
     func initRepository() {
-        guard let p = pickFolder("Выберите папку для git init") else { return }
+        guard let p = pickFolder(L("Выберите папку для git init")) else { return }
         Task {
             let r = await Shell.git(["init"], cwd: p)
-            if r.ok { addExtra(p) } else { banner = Banner(title: "git init: ошибка", text: r.combined, isError: true) }
+            if r.ok { addExtra(p) } else { banner = Banner(title: L("git init: ошибка"), text: r.combined, isError: true) }
         }
     }
 
@@ -159,9 +171,9 @@ final class AppStore: ObservableObject {
             rescan()
             selected = target
             showClone = false
-            banner = Banner(title: "Клонировано", text: target, isError: false)
+            banner = Banner(title: L("Клонировано"), text: target, isError: false)
         } else {
-            banner = Banner(title: "git clone: ошибка", text: r.combined, isError: true)
+            banner = Banner(title: L("git clone: ошибка"), text: r.combined, isError: true)
         }
     }
 
@@ -176,13 +188,13 @@ final class AppStore: ObservableObject {
         catch { return ([], error.localizedDescription) }
     }
 
-    func cancelSync() { syncControl?.cancel(); syncProgress = "Прерываю…" }
+    func cancelSync() { syncControl?.cancel(); syncProgress = L("Прерываю…") }
 
     /// Клонирует в `ws` все репозитории организации, которых там ещё нет. Существующие не трогает и ничего не удаляет.
     func syncOrganization(_ org: String, into ws: String, includeArchived: Bool) async {
         guard !syncingOrg else { return }
         syncingOrg = true
-        syncProgress = "Получаю список репозиториев…"
+        syncProgress = L("Получаю список репозиториев…")
         let control = RunControl()
         syncControl = control
         defer { syncingOrg = false; syncProgress = ""; syncControl = nil }
@@ -192,9 +204,9 @@ final class AppStore: ObservableObject {
             list = try await GitHubAPI.repos(org: org, control: control).filter { includeArchived || !$0.archived }
         } catch {
             if control.isCancelled {
-                banner = Banner(title: "Синхронизация \(org) прервана", text: "Список репозиториев не получен", isError: true)
+                banner = Banner(title: L("Синхронизация %@ прервана", org), text: L("Список репозиториев не получен"), isError: true)
             } else {
-                banner = Banner(title: "Синхронизация \(org): ошибка", text: (error as? GitHubAPI.Failure)?.text ?? error.localizedDescription, isError: true)
+                banner = Banner(title: L("Синхронизация %@: ошибка", org), text: (error as? GitHubAPI.Failure)?.text ?? error.localizedDescription, isError: true)
             }
             return
         }
@@ -224,7 +236,7 @@ final class AppStore: ObservableObject {
                     group.addTask {
                         let r = await Shell.run("/usr/bin/env", ["git", "clone", urls[n] ?? "", ws + "/" + n], cwd: ws, control: control)
                         if control.isCancelled { try? FileManager.default.removeItem(atPath: ws + "/" + n) }  // недокачанный клон
-                        return (n, r.ok, r.combined.split(separator: "\n").last.map(String.init) ?? "ошибка", true)
+                        return (n, r.ok, r.combined.split(separator: "\n").last.map(String.init) ?? L("ошибка"), true)
                     }
                 } else if index - missing.count < toUpdate.count {
                     let p = toUpdate[index - missing.count]; index += 1
@@ -237,7 +249,7 @@ final class AppStore: ObservableObject {
             for _ in 0..<min(8, total) { next() }
             while let (n, ok, msg, _) = await group.next() {
                 done += 1
-                syncProgress = "Обработано \(done) из \(total)"
+                syncProgress = L("Обработано %lld из %lld", done, total)
                 if !ok && !control.isCancelled { failures.append("✗ \(n): \(msg)") }
                 next()
             }
@@ -245,15 +257,16 @@ final class AppStore: ObservableObject {
         rescan()
         await refreshModels()
         if control.isCancelled {
-            banner = Banner(title: "Синхронизация \(org) прервана",
-                            text: "Обработано \(done) из \(total). Недокачанные клоны удалены, уже готовые репозитории сохранены." +
-                                  (failures.isEmpty ? "" : "\nОшибки до прерывания:\n" + failures.sorted().joined(separator: "\n")),
+            banner = Banner(title: L("Синхронизация %@ прервана", org),
+                            text: L("Обработано %lld из %lld. Недокачанные клоны удалены, уже готовые репозитории сохранены.", done, total) +
+                                  (failures.isEmpty ? "" : L("\nОшибки до прерывания:\n") + failures.sorted().joined(separator: "\n")),
                             isError: true)
             return
         }
-        var text = "Склонировано новых: \(missing.count - failures.filter { f in missing.contains { f.hasPrefix("✗ \($0):") } }.count), обновлено существующих: \(toUpdate.count)"
-        if !failures.isEmpty { text += ", ошибок: \(failures.count)\n" + failures.sorted().joined(separator: "\n") }
-        banner = Banner(title: failures.isEmpty ? "Синхронизация \(org) завершена" : "Синхронизация \(org): есть ошибки",
+        let clonedNew = missing.count - failures.filter { f in missing.contains { f.hasPrefix("✗ \($0):") } }.count
+        var text = L("Склонировано новых: %lld, обновлено существующих: %lld", clonedNew, toUpdate.count)
+        if !failures.isEmpty { text += L(", ошибок: %lld\n", failures.count) + failures.sorted().joined(separator: "\n") }
+        banner = Banner(title: failures.isEmpty ? L("Синхронизация %@ завершена", org) : L("Синхронизация %@: есть ошибки", org),
                         text: text, isError: !failures.isEmpty)
         if failures.isEmpty { showOrgSync = false }
     }
@@ -265,7 +278,7 @@ final class AppStore: ObservableObject {
         guard !updatingWorkspaces.contains(ws) else { return }
         let paths = (found[ws] ?? []).map(\.path)
         guard !paths.isEmpty else {
-            banner = Banner(title: "Обновить все", text: "В рабочей области нет репозиториев", isError: true)
+            banner = Banner(title: L("Обновить все"), text: L("В рабочей области нет репозиториев"), isError: true)
             return
         }
         updatingWorkspaces.insert(ws)
@@ -289,7 +302,7 @@ final class AppStore: ObservableObject {
             lines.sort()
             updatingWorkspaces.remove(ws)
             await refreshModels()
-            banner = Banner(title: failed == 0 ? "Обновлено репозиториев: \(paths.count)" : "Обновление: ошибок \(failed) из \(paths.count)",
+            banner = Banner(title: failed == 0 ? L("Обновлено репозиториев: %lld", paths.count) : L("Обновление: ошибок %lld из %lld", failed, paths.count),
                             text: lines.joined(separator: "\n"), isError: failed > 0)
         }
     }
@@ -298,9 +311,9 @@ final class AppStore: ObservableObject {
         let f = await Shell.git(["fetch", "--all", "--prune"], cwd: p, control: control)
         guard f.ok else { return (p, false, "fetch: " + f.combined) }
         let up = await Shell.git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd: p, control: control)
-        guard up.ok else { return (p, true, "fetch выполнен (у текущей ветки нет upstream или HEAD отсоединён)") }
+        guard up.ok else { return (p, true, L("fetch выполнен (у текущей ветки нет upstream или HEAD отсоединён)")) }
         let r = await Shell.git(["pull", "--ff-only"], cwd: p, control: control)
-        return (p, r.ok, r.combined.isEmpty ? "готово" : r.combined.split(separator: "\n").last.map(String.init) ?? "готово")
+        return (p, r.ok, r.combined.isEmpty ? L("готово") : r.combined.split(separator: "\n").last.map(String.init) ?? L("готово"))
     }
 
     private func refreshModels() async {
@@ -309,9 +322,9 @@ final class AppStore: ObservableObject {
     }
 
     func promptFetchBranch(for repo: Repo) {
-        prompt = PromptRequest(title: "Выкачать ветку", message: repo.name,
-                               fields: [PromptField(label: "Имя ветки")],
-                               confirmLabel: "Выкачать") { [weak self] v, _ in
+        prompt = PromptRequest(title: L("Выкачать ветку"), message: repo.name,
+                               fields: [PromptField(label: L("Имя ветки"))],
+                               confirmLabel: L("Выкачать")) { [weak self] v, _ in
             guard let name = v.first?.trimmed, !name.isEmpty else { return }
             Task { await self?.fetchBranch(name, in: repo.path) }
         }
@@ -319,9 +332,9 @@ final class AppStore: ObservableObject {
 
     /// Подтягивает ветку по имени с удалённого репозитория и переключается на неё.
     func fetchBranch(_ name: String, in path: String) async {
-        let title = "Выкачать ветку \(name)"
+        let title = L("Выкачать ветку %@", name)
         let f = await Shell.git(["fetch", "--all", "--prune"], cwd: path)
-        guard f.ok else { banner = Banner(title: "\(title): ошибка", text: f.combined, isError: true); return }
+        guard f.ok else { banner = Banner(title: L("%@: ошибка", title), text: f.combined, isError: true); return }
 
         let local = await Shell.git(["rev-parse", "--verify", "--quiet", "refs/heads/" + name], cwd: path)
         let r: CmdResult
@@ -333,17 +346,17 @@ final class AppStore: ObservableObject {
             } else { r = sw }
         } else {
             guard let remote = await Shell.remoteTrackingRef(name, cwd: path) else {
-                banner = Banner(title: "\(title): ошибка", text: "Ветка «\(name)» не найдена ни локально, ни на удалённых репозиториях", isError: true)
+                banner = Banner(title: L("%@: ошибка", title), text: L("Ветка «%@» не найдена ни локально, ни на удалённых репозиториях", name), isError: true)
                 return
             }
             r = await Shell.switchTracking(remote, name: name) { await Shell.git($0, cwd: path) }
         }
         if r.ok {
-            banner = Banner(title: title, text: r.combined.isEmpty ? "Готово" : r.combined, isError: false)
+            banner = Banner(title: title, text: r.combined.isEmpty ? L("Готово") : r.combined, isError: false)
             if let m = models[path] { await m.refreshAll() }
             rowRefresh += 1
         } else {
-            banner = Banner(title: "\(title): ошибка", text: r.combined, isError: true)
+            banner = Banner(title: L("%@: ошибка", title), text: r.combined, isError: true)
         }
     }
 
@@ -354,7 +367,7 @@ final class AppStore: ObservableObject {
         p.canCreateDirectories = true
         p.allowsMultipleSelection = false
         p.message = message
-        p.prompt = "Выбрать"
+        p.prompt = L("Выбрать")
         return p.runModal() == .OK ? p.url?.path : nil
     }
 

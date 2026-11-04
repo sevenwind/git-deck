@@ -96,14 +96,14 @@ struct StashView: View {
                             Button("Apply") { Task { await model.run("Stash apply", ["stash", "apply", s.ref]) } }
                             Button("Pop") { Task { await model.run("Stash pop", ["stash", "pop", s.ref]) } }
                             Button("Создать ветку…") {
-                                model.prompt = PromptRequest(title: "Ветка из stash", fields: [PromptField(label: "Название")], confirmLabel: "Создать") { v, _ in
+                                model.prompt = PromptRequest(title: L("Ветка из stash"), fields: [PromptField(label: L("Название"))], confirmLabel: L("Создать")) { v, _ in
                                     guard let n = v.first?.trimmed, !n.isEmpty else { return }
                                     Task { await model.run("Stash branch", ["stash", "branch", n, s.ref]) }
                                 }
                             }
                             Divider()
                             Button("Drop…", role: .destructive) {
-                                model.confirm = ConfirmRequest(title: "Удалить \(s.ref)?", message: s.message, confirmLabel: "Drop") {
+                                model.confirm = ConfirmRequest(title: L("Удалить %@?", s.ref), message: s.message, confirmLabel: "Drop") {
                                     Task { await model.run("Stash drop", ["stash", "drop", s.ref]) }
                                 }
                             }
@@ -118,7 +118,7 @@ struct StashView: View {
                         Button("Apply") { Task { await model.run("Stash apply", ["stash", "apply", r]) } }
                         Button("Pop") { Task { await model.run("Stash pop", ["stash", "pop", r]) } }
                         Button("Drop", role: .destructive) {
-                            model.confirm = ConfirmRequest(title: "Удалить \(r)?", message: "Stash будет удалён.", confirmLabel: "Drop") {
+                            model.confirm = ConfirmRequest(title: L("Удалить %@?", r), message: L("Stash будет удалён."), confirmLabel: "Drop") {
                                 Task { await model.run("Stash drop", ["stash", "drop", r]) }
                             }
                         }
@@ -159,7 +159,7 @@ struct TagsRemotesView: View {
                             Text(t.date).font(.caption).foregroundStyle(.secondary)
                         }
                         .contextMenu {
-                            Button("Push тега") { Task { await model.run("Push тега", ["push", model.defaultRemote, t.name], showOutput: true) } }
+                            Button("Push тега") { Task { await model.run(L("Push тега"), ["push", model.defaultRemote, t.name], showOutput: true) } }
                             Button("Checkout") { Task { await model.checkoutRef(t.name) } }
                             Button("Копировать имя") { copyToPasteboard(t.name) }
                             Divider()

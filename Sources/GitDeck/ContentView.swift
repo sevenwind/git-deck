@@ -150,15 +150,23 @@ struct RepoRow: View {
                 }
             }
             Spacer(minLength: 0)
+            let fav = store.favorites.contains(repo.path)
             if let i = info, i.dirty > 0 {
                 Text("\(i.dirty)").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 1)
                     .background(Capsule().fill(.orange.opacity(0.25))).foregroundStyle(.orange)
                     .help("Изменённых файлов: \(i.dirty)")
             }
+            Button { store.toggleFavorite(repo.path) } label: {
+                Image(systemName: fav ? "star.fill" : "star")
+                    .foregroundStyle(fav ? Color.yellow : Color.secondary.opacity(0.45))
+            }
+            .buttonStyle(.borderless)
+            .help(fav ? "Убрать из избранного" : "Добавить в избранное")
         }
         .help(repo.path)
         .task(id: store.rowRefresh) { info = await store.loadRowInfo(repo) }
         .contextMenu {
+            Button(store.favorites.contains(repo.path) ? "Убрать из избранного" : "Добавить в избранное") { store.toggleFavorite(repo.path) }
             Button("Выкачать ветку…") { store.promptFetchBranch(for: repo) }
             Divider()
             Button("Открыть в Terminal") { store.openTerminal(at: repo.path) }
@@ -187,7 +195,7 @@ struct CloneSheet: View {
                     ForEach(store.workspaces, id: \.self) { Text(($0 as NSString).abbreviatingWithTildeInPath).tag($0) }
                     if !parent.isEmpty && !store.workspaces.contains(parent) { Text(parent).tag(parent) }
                 }
-                Button("Другая…") { if let p = store.pickFolder("Куда клонировать") { parent = p } }
+                Button("Другая…") { if let p = store.pickFolder(L("Куда клонировать")) { parent = p } }
             }
             TextField("Имя папки", text: $name, onEditingChanged: { _ in nameEdited = true })
                 .textFieldStyle(.roundedBorder)
@@ -243,7 +251,7 @@ struct OrgSyncSheet: View {
                         ForEach(store.workspaces, id: \.self) { Text(($0 as NSString).abbreviatingWithTildeInPath).tag($0) }
                         if !parent.isEmpty && !store.workspaces.contains(parent) { Text(parent).tag(parent) }
                     }
-                    Button("Другая…") { if let p = store.pickFolder("Куда клонировать репозитории организации") { parent = p } }
+                    Button("Другая…") { if let p = store.pickFolder(L("Куда клонировать репозитории организации")) { parent = p } }
                 }
                 Toggle("Включая архивные", isOn: $includeArchived)
             }

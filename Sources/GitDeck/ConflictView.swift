@@ -169,7 +169,7 @@ struct ConflictResolverView: View {
         } else if let loadError {
             VStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle").font(.system(size: 30)).foregroundStyle(.orange)
-                Text(loadError).multilineTextAlignment(.center).foregroundStyle(.secondary)
+                Text(L(loadError)).multilineTextAlignment(.center).foregroundStyle(.secondary)
                 Text("Выберите версию всего файла в меню «Весь файл» или отредактируйте его вручную и отметьте как решённый.")
                     .font(.caption).multilineTextAlignment(.center).foregroundStyle(.secondary)
             }
@@ -229,7 +229,7 @@ struct ConflictResolverView: View {
         let refs = b.refs(side)
         let selected = choices[i] ?? []
         let allOn = !refs.isEmpty && refs.allSatisfy(selected.contains)
-        let title = side == .ours ? "Текущая" : "Входящая"
+        let title = side == .ours ? L("Текущая") : L("Входящая")
         let label = side == .ours ? b.oursLabel : b.theirsLabel
         return VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -311,7 +311,7 @@ struct ConflictResolverView: View {
             // Запись «на месте», чтобы сохранить права доступа файла.
             try Data(doc.render(choices).utf8).write(to: url)
         } catch {
-            model.show("Конфликт: ошибка", error.localizedDescription, error: true)
+            model.show(L("Конфликт: ошибка"), error.localizedDescription, error: true)
             return
         }
         await model.resolve(file, side: nil)

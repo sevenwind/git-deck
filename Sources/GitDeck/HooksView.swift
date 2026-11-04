@@ -40,14 +40,14 @@ struct HooksView: View {
                 if !h.huskyInstalled && !h.huskyDirExists {
                     Button("Инициализировать Husky…") { model.askInitHusky() }
                 } else {
-                    Button(h.huskyInstalled ? "Активировать хуки" : "npm install") { Task { await model.activateHusky() } }
-                        .help(h.huskyInstalled ? "npx husky — выставляет core.hooksPath" : "Установит зависимости; husky подключится через prepare-скрипт")
+                    Button(h.huskyInstalled ? L("Активировать хуки") : "npm install") { Task { await model.activateHusky() } }
+                        .help(h.huskyInstalled ? L("npx husky — выставляет core.hooksPath") : L("Установит зависимости; husky подключится через prepare-скрипт"))
                 }
                 Button { Task { await model.refreshHooks() } } label: { Image(systemName: "arrow.clockwise") }
                     .help("Перечитать список git-хуков и настройки Husky с диска")
             }
             HStack(spacing: 14) {
-                Text("core.hooksPath: \(h.hooksPathConfig ?? "не задан (.git/hooks)")").font(.caption).foregroundStyle(.secondary)
+                Text("core.hooksPath: \(h.hooksPathConfig ?? L("не задан (.git/hooks)"))").font(.caption).foregroundStyle(.secondary)
                 Button("Изменить…") { model.promptHooksPath() }.buttonStyle(.link).font(.caption)
                 if h.hooksPathConfig != nil { Button("Сбросить") { Task { await model.resetHooksPath() } }.buttonStyle(.link).font(.caption) }
                 Spacer()
@@ -61,10 +61,10 @@ struct HooksView: View {
 
     private var statusText: String {
         let h = model.hooks
-        if h.huskyActive { return "активен · \(h.hooksPathConfig ?? "")" }
-        if h.huskyDirExists { return "папка .husky есть, но не активирована" }
-        if h.huskyInstalled { return "установлен, папки .husky нет" }
-        return h.hasPackageJson ? "не установлен" : "нет package.json"
+        if h.huskyActive { return L("активен · %@", h.hooksPathConfig ?? "") }
+        if h.huskyDirExists { return L("папка .husky есть, но не активирована") }
+        if h.huskyInstalled { return L("установлен, папки .husky нет") }
+        return h.hasPackageJson ? L("не установлен") : L("нет package.json")
     }
 
     private var hooksList: some View {
@@ -144,6 +144,6 @@ struct HookEditor: View {
             try text.write(toFile: file.path, atomically: true, encoding: .utf8)
             original = text
             if file.executable { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path) }
-        } catch { model.show("Не удалось сохранить", error.localizedDescription, error: true) }
+        } catch { model.show(L("Не удалось сохранить"), error.localizedDescription, error: true) }
     }
 }

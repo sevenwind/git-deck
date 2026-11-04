@@ -70,14 +70,14 @@ final class Updater: ObservableObject {
     func checkInteractive() async {
         guard phase == .idle else { return }
         phase = .checking
-        status = "Проверка обновлений…"
+        status = L("Проверка обновлений…")
         do {
             let (release, asset) = try await fetchLatest()
             let latest = release.tag_name
             guard Self.isNewer(latest, than: currentVersion) else {
                 phase = .idle
-                status = "Установлена последняя версия (\(currentVersion))"
-                alert("Обновлений нет", "У вас последняя версия GitDeck (\(currentVersion)).")
+                status = L("Установлена последняя версия (%@)", currentVersion)
+                alert(L("Обновлений нет"), L("У вас последняя версия GitDeck (%@).", currentVersion))
                 return
             }
             phase = .idle
@@ -86,8 +86,8 @@ final class Updater: ObservableObject {
             await promptInstall()
         } catch {
             phase = .idle
-            status = "Ошибка: \(error.localizedDescription)"
-            alert("Не удалось проверить обновления", error.localizedDescription)
+            status = L("Ошибка: %@", error.localizedDescription)
+            alert(L("Не удалось проверить обновления"), error.localizedDescription)
         }
     }
 
@@ -95,17 +95,17 @@ final class Updater: ObservableObject {
     func promptInstall() async {
         guard phase == .idle else { return }
         guard let (release, asset) = pending else { return await checkInteractive() }
-        status = "Доступна версия \(release.tag_name)"
+        status = L("Доступна версия %@", release.tag_name)
         let notes = (release.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let text = "Доступна версия \(release.tag_name), у вас \(currentVersion)." + (notes.isEmpty ? "" : "\n\n\(notes.prefix(800))")
-        if confirm("Доступно обновление", text, ok: "Установить и перезапустить") {
+        let text = L("Доступна версия %@, у вас %@.", release.tag_name, currentVersion) + (notes.isEmpty ? "" : "\n\n\(notes.prefix(800))")
+        if confirm(L("Доступно обновление"), text, ok: L("Установить и перезапустить")) {
             await install(asset: asset)
         }
     }
 
     private func fetchLatest() async throws -> (Release, Release.Asset) {
         guard repo.split(separator: "/").count == 2 else {
-            throw UpdateError.message("Укажите репозиторий GitHub (owner/repo) в настройках.")
+            throw UpdateError.message(L("Укажите репозиторий GitHub (owner/repo) в настройках."))
         }
         var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -113,12 +113,12 @@ final class Updater: ObservableObject {
         let (data, resp) = try await URLSession.shared.data(for: req)
         if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
             throw UpdateError.message(http.statusCode == 404
-                ? "Релизы не найдены (404). Для приватного репозитория обновление недоступно."
-                : "GitHub вернул статус \(http.statusCode).")
+                ? L("Релизы не найдены (404). Для приватного репозитория обновление недоступно.")
+                : L("GitHub вернул статус %lld.", http.statusCode))
         }
         let release = try JSONDecoder().decode(Release.self, from: data)
         guard let asset = release.assets.first(where: { $0.name.lowercased().hasSuffix(".dmg") }) else {
-            throw UpdateError.message("В релизе \(release.tag_name) нет .dmg-файла.")
+            throw UpdateError.message(L("В релизе %@ нет .dmg-файла.", release.tag_name))
         }
         return (release, asset)
     }
@@ -127,17 +127,17 @@ final class Updater: ObservableObject {
         do {
             let target = Bundle.main.bundleURL
             guard FileManager.default.isWritableFile(atPath: target.deletingLastPathComponent().path) else {
-                throw UpdateError.message("Нет прав на запись в \(target.deletingLastPathComponent().path).")
+                throw UpdateError.message(L("Нет прав на запись в %@.", target.deletingLastPathComponent().path))
             }
             phase = .downloading
-            status = "Скачивание \(asset.name)…"
+            status = L("Скачивание %@…", asset.name)
             let (tmp, resp) = try await URLSession.shared.download(from: asset.browser_download_url)
             if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
-                throw UpdateError.message("Скачивание не удалось (статус \(http.statusCode)).")
+                throw UpdateError.message(L("Скачивание не удалось (статус %lld).", http.statusCode))
             }
 
             phase = .installing
-            status = "Установка…"
+            status = L("Установка…")
             let work = FileManager.default.temporaryDirectory.appendingPathComponent("gitdeck-update-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
             let dmg = work.appendingPathComponent("update.dmg")
@@ -149,7 +149,7 @@ final class Updater: ObservableObject {
             let staged = work.appendingPathComponent("GitDeck.app")
             do {
                 guard FileManager.default.fileExists(atPath: mount.appendingPathComponent("GitDeck.app").path) else {
-                    throw UpdateError.message("В образе нет GitDeck.app.")
+                    throw UpdateError.message(L("В образе нет GitDeck.app."))
                 }
                 try await run("/usr/bin/ditto", [mount.appendingPathComponent("GitDeck.app").path, staged.path])
             } catch {
@@ -176,8 +176,8 @@ final class Updater: ObservableObject {
             NSApp.terminate(nil)
         } catch {
             phase = .idle
-            status = "Ошибка: \(error.localizedDescription)"
-            alert("Не удалось установить обновление", error.localizedDescription)
+            status = L("Ошибка: %@", error.localizedDescription)
+            alert(L("Не удалось установить обновление"), error.localizedDescription)
         }
     }
 
@@ -227,7 +227,7 @@ final class Updater: ObservableObject {
         a.messageText = title
         a.informativeText = text
         a.addButton(withTitle: ok)
-        a.addButton(withTitle: "Позже")
+        a.addButton(withTitle: L("Позже"))
         return a.runModal() == .alertFirstButtonReturn
     }
 }

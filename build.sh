@@ -13,10 +13,14 @@ ICONS=$(mktemp -d)/AppIcon.iconset
 swift tools/make_icon.swift "$ICONS"
 iconutil -c icns "$ICONS" -o "$APP/Contents/Resources/AppIcon.icns"
 
+for L in Localization/*.lproj; do cp -R "$L" "$APP/Contents/Resources/"; done
+
 cat > "$APP/Contents/Info.plist" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>ru</string>
+<key>CFBundleLocalizations</key><array><string>ru</string><string>en</string></array>
 <key>CFBundleName</key><string>GitDeck</string>
 <key>CFBundleDisplayName</key><string>GitDeck</string>
 <key>CFBundleIdentifier</key><string>local.gitdeck.app</string>

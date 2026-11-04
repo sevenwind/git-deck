@@ -67,8 +67,8 @@ struct HunkDiffView: View {
                             } else {
                                 Button("Добавить блок") { Task { await model.applyHunk(h, mode: .stage) } }
                                 Button("Отменить блок", role: .destructive) {
-                                    model.confirm = ConfirmRequest(title: "Отменить этот блок?", message: "Изменения в блоке будут потеряны.",
-                                                                   confirmLabel: "Отменить блок") {
+                                    model.confirm = ConfirmRequest(title: L("Отменить этот блок?"), message: L("Изменения в блоке будут потеряны."),
+                                                                   confirmLabel: L("Отменить блок")) {
                                         Task { await model.applyHunk(h, mode: .discard) }
                                     }
                                 }
