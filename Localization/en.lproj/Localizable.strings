@@ -367,3 +367,10 @@
 "Убрать из избранного" = "Remove from favorites";
 "Добавить в избранное" = "Add to favorites";
 "Язык / Language" = "Language";
+"Цветовая схема кода" = "Code color scheme";
+"Системная" = "System";
+"Открыть в редакторе" = "Open in Editor";
+"Открыть репозиторий в редакторе, выбранном в настройках (⇧⌘E)" = "Open the repository in the editor chosen in Settings (⇧⌘E)";
+"Редактор (имя приложения)" = "Editor (app name)";
+"Не удалось открыть редактор" = "Could not open editor";
+"Приложение «%@» не найдено. Укажите редактор в настройках." = "App “%@” was not found. Set the editor in Settings.";

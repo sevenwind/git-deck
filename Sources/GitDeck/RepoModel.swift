@@ -840,6 +840,15 @@ final class RepoModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)])
     }
 
+    func openInEditor() {
+        let stored = UserDefaults.standard.string(forKey: "editorApp")?.trimmed ?? ""
+        let app = stored.isEmpty ? "Visual Studio Code" : stored
+        Task {
+            let r = await Shell.run("/usr/bin/open", ["-a", app, path])
+            if !r.ok { show(L("Не удалось открыть редактор"), L("Приложение «%@» не найдено. Укажите редактор в настройках.", app) + "\n" + r.combined, error: true) }
+        }
+    }
+
     func openTerminal() {
         let app = UserDefaults.standard.string(forKey: "terminalApp") ?? "Terminal"
         Task { _ = await Shell.run("/usr/bin/open", ["-a", app.isEmpty ? "Terminal" : app, path]) }

@@ -116,6 +116,8 @@ struct HeaderBar: View {
             Divider().frame(height: 18)
             Button { model.openTerminal() } label: { Label("Terminal", systemImage: "terminal") }
                 .help("Открыть репозиторий в терминале (⇧⌘T)")
+            Button { model.openInEditor() } label: { Label("Editor", systemImage: "chevron.left.forwardslash.chevron.right") }
+                .help("Открыть репозиторий в редакторе, выбранном в настройках (⇧⌘E)")
             Button { model.revealInFinder() } label: { Image(systemName: "folder") }.help("Открыть папку репозитория в Finder")
             Button { Task { await model.refreshAll() } } label: { Image(systemName: "arrow.clockwise") }.help("Перечитать состояние репозитория: статус, ветки, историю, stash и теги (⌘R). Сеть не используется — для загрузки с сервера нажмите Fetch")
         }

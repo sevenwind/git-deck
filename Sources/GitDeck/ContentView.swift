@@ -169,6 +169,7 @@ struct RepoRow: View {
             Button(store.favorites.contains(repo.path) ? "Убрать из избранного" : "Добавить в избранное") { store.toggleFavorite(repo.path) }
             Button("Выкачать ветку…") { store.promptFetchBranch(for: repo) }
             Divider()
+            Button("Открыть в редакторе") { store.openInEditor(at: repo.path) }
             Button("Открыть в Terminal") { store.openTerminal(at: repo.path) }
             Button("Показать в Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: repo.path)]) }
             Button("Копировать путь") { copyToPasteboard(repo.path) }

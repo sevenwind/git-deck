@@ -376,6 +376,15 @@ final class AppStore: ObservableObject {
         Task { _ = await Shell.run("/usr/bin/open", ["-a", app.isEmpty ? "Terminal" : app, path]) }
     }
 
+    func openInEditor(at path: String) {
+        let stored = UserDefaults.standard.string(forKey: "editorApp")?.trimmed ?? ""
+        let app = stored.isEmpty ? "Visual Studio Code" : stored
+        Task {
+            let r = await Shell.run("/usr/bin/open", ["-a", app, path])
+            if !r.ok { banner = Banner(title: L("Не удалось открыть редактор"), text: L("Приложение «%@» не найдено. Укажите редактор в настройках.", app) + "\n" + r.combined, isError: true) }
+        }
+    }
+
     func loadRowInfo(_ repo: Repo) async -> RowInfo? {
         let r = await Shell.git(["status", "--porcelain=v1", "--branch"], cwd: repo.path, env: ["GIT_OPTIONAL_LOCKS": "0"])
         guard r.ok else { return nil }

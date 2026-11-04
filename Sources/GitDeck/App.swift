@@ -108,6 +108,9 @@ struct GitDeckApp: App {
                 Button(L("Пересканировать рабочие области")) { store.rescan() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                 Divider()
+                Button(L("Открыть в редакторе")) { if let p = store.selected { store.openInEditor(at: p) } }
+                    .keyboardShortcut("e", modifiers: [.command, .shift])
+                    .disabled(store.selected == nil)
                 Button(L("Открыть в Terminal")) { if let p = store.selected { store.openTerminal(at: p) } }
                     .keyboardShortcut("t", modifiers: [.command, .shift])
                     .disabled(store.selected == nil)
@@ -133,9 +136,11 @@ struct GitDeckApp: App {
 
 struct SettingsView: View {
     @AppStorage("terminalApp") private var terminalApp = "Terminal"
+    @AppStorage("editorApp") private var editorApp = "Visual Studio Code"
     @AppStorage("disableHusky") private var disableHusky = false
     @AppStorage("scanDepth") private var scanDepth = 5
     @AppStorage("menuBarMode") private var menuBarMode = false
+    @AppStorage("syntaxTheme") private var syntaxTheme = SyntaxTheme.system.id
     @AppStorage("updateRepo") private var updateRepo = Updater.defaultRepo
     @EnvironmentObject var store: AppStore
     @EnvironmentObject var updater: Updater
@@ -145,6 +150,11 @@ struct SettingsView: View {
             Picker("Язык / Language", selection: $store.lang) {
                 ForEach(AppLang.allCases) { Text($0.title).tag($0) }
             }
+            Picker("Цветовая схема кода", selection: $syntaxTheme) {
+                ForEach(SyntaxTheme.all) { Text($0.title).tag($0.id) }
+            }
+            ThemePreview(theme: SyntaxTheme.byID(syntaxTheme))
+            TextField("Редактор (имя приложения)", text: $editorApp, prompt: Text("Visual Studio Code, Cursor, Zed…"))
             TextField("Терминал (имя приложения)", text: $terminalApp, prompt: Text("Terminal, iTerm, Warp…"))
             Stepper("Глубина поиска репозиториев: \(scanDepth)", value: $scanDepth, in: 1...10)
             Toggle("Отключить Husky (HUSKY=0) для операций из приложения", isOn: $disableHusky)

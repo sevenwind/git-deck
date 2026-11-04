@@ -95,7 +95,7 @@ struct ChangesView: View {
                 }
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 Divider()
-                HunkDiffView(diff: d, staged: sel.staged, untracked: f.untracked, model: model)
+                HunkDiffView(diff: d, staged: sel.staged, untracked: f.untracked, path: f.path, model: model)
             }
         } else {
             Text("Выберите файл, чтобы увидеть изменения").foregroundStyle(.secondary)
